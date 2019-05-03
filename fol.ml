@@ -35,6 +35,24 @@ type dsu = { mutable p : int; mutable r : int };;
 
 let apply f (s, r) = (f s, r);;
 
+let term_of_atom = function
+  | P (n, l) -> Fn (n, l);;
+
+let apply_literal f = function
+  | L p -> L (f p)
+  | NL p -> NL (f p);;
+
+let is_literal_positive = function
+  | L _ -> true;
+  | NL _ -> false;;
+
+let atom_of_literal = function
+  | L p | NL p -> p;;
+
+let negate_literal = function
+  | L p -> NL p
+  | NL p -> L p;;
+
 let parse_bracket p r =
   let f, r = p r in
   match r with | ")"::_ -> f, List.tl r
@@ -147,7 +165,7 @@ let parenthesize print x =
 let rec print_term = function
   | Var v -> print_string "V"; print_int v
   | Fn (f, l) -> print_string f;
-    if l <> [] then parenthesize print_term_list l;;
+    if l <> [] then parenthesize print_term_list l
 and print_term_list = function
   | [] -> ()
   | [p] -> print_term p
@@ -159,7 +177,7 @@ let rec print = function
   | False -> print_string "FALSE"
   | True -> print_string "TRUE"
   | Atom a -> print_atom a
-  | Not f (Atom a) -> print_string "NOT "; print_atom a
+  | Not (Atom a) -> print_string "NOT "; print_atom a
   | Not f -> print_string "NOT"; parenthesize print f
   | And (f, g) -> parenthesize print f;
     print_string " AND ";
@@ -187,7 +205,7 @@ let tree_of_atom p = tree_of_term (term_of_atom p);;
 let rec tree_of_fol = function
   | False -> T ("false", [])
   | True -> T ("true", [])
-  | Atom a -> atom_to_fol a
+  | Atom a -> tree_of_atom a
   | Not f -> T ("not", [tree_of_fol f])
   | And (f, g) -> T ("and", [tree_of_fol f; tree_of_fol g])
   | Or (f, g) -> T ("or", [tree_of_fol f; tree_of_fol g])
@@ -272,24 +290,6 @@ let rec nnf neg = function
 
 let to_nnf f = nnf false (parse f);;
 
-let term_from_atom = function
-  | P (n, l) -> Fn (n, l);;
-
-let apply_literal f = function
-  | L p -> L (f p)
-  | NL p -> NL (f p);;
-
-let is_literal_positive = function
-  | L _ -> true;
-  | NL _ -> false;;
-
-let atom_from_literal = function
-  | L p | NL p -> p;;
-
-let negate_literal = function
-  | L p -> NL p
-  | NL p -> L p;;
-
 let rec substitute_term s = function
   | Var x -> s x
   | Fn (n, l) -> Fn (n, List.map (substitute_term s) l);;
@@ -302,14 +302,14 @@ let substitute_literal s = apply_literal (substitute_atom s);;
 let substitute_clause s =
   List.map (substitute_literal s);;
 
-let substitute_from_hashtbl s =
+let substitute_of_hashtbl s =
   fun x -> if Hashtbl.mem s x then Hashtbl.find s x else Var x;;
 
 let rec max_variable_term = function
   | Var x -> x
   | Fn (_, l) -> List.fold_left (fun a b -> max a (max_variable_term b)) (-1) l;;
 
-let rec max_variable_atom p = max_variable_term (term_from_atom p);;
+let rec max_variable_atom p = max_variable_term (term_of_atom p);;
 
 let rec max_variable_clause = function
   | [] -> -1
@@ -319,7 +319,7 @@ let rec non_variable_count_term = function
   | Var _ -> 0
   | Fn (_, l) -> List.fold_left (fun a b -> non_variable_count_term b + a) 1 l;;
 
-let non_variable_count_atom p = non_variable_count (term_from_atom p);;
+let non_variable_count_atom p = non_variable_count_term (term_of_atom p);;
 
 let rec non_variable_count_clause = function
   | [] -> 0
@@ -338,7 +338,7 @@ let rename f =
   let rec aux = function
     | False -> False
     | True -> True
-    | Atom a -> Atom (rewrite_atom rewrite a)
+    | Atom a -> Atom (rename_atom rewrite a)
     | Not f -> Not (aux f)
     | And (a, b) -> let a = aux a and b = aux b in And (a, b)
     | Or (a, b) -> let a = aux a and b = aux b in Or (a, b)
@@ -589,11 +589,11 @@ let unify_literal_bool g p q = match p, q with
   | _ -> false;;
 
 let unify_atoms g p q =
-  let p, q = term_from_atom p, term_from_atom q in
+  let p, q = term_of_atom p, term_of_atom q in
   unify_terms g p q;;
 
 let unify_routine g p q b =
-  let p, q = term_from_atom p, term_from_atom q in
+  let p, q = term_of_atom p, term_of_atom q in
   unify_fast p q &&
   begin
     if b then
@@ -641,8 +641,8 @@ let rec find_unifiable g acc hp p tp hq = function
           begin
             let s = (fun x -> match !g.(2 * x).n with T t -> t | _ -> Var (2 * x)) in
             let t = (fun x -> match !g.(2 * x + 1).n with T t -> t | _ -> Var (2 * x + 1)) in
-            let u = substitute_clause s (substitute_clause s [] tp) hp in
-            let v = substitute_clause t (substitute_clause t [] tq) hq in
+            let u = substitute_clause s hp@substitute_clause s tp in
+            let v = substitute_clause t hq@substitute_clause t tq in
             let c = ref 0 in
             let r = simplify_clause [] (pack_clause !g c (pack_clause !g c [] u) v) in
             let n = max (max_variable_clause (p::u)) (max_variable_clause (q::v)) in
@@ -677,7 +677,7 @@ let rec find_factor g acc hp p = function
         if b then
           begin
             let s = (fun x -> match !g.(x).n with T t -> t | _ -> Var x) in
-            let u = substitute_clause s (substitute_clause s [substitute_literal s p] tp) hp in
+            let u = substitute_clause s hp@substitute_clause s tp in
             let c = ref 0 in
             let r = simplify_clause [] (pack_clause !g c [] u) in
             let n = max_variable_clause u in
