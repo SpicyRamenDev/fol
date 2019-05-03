@@ -422,9 +422,9 @@ let rec print_cnf = function
   | [c] -> print_clause c
   | c::t -> parenthesize (fun _ -> print_clause c; print_string " AND "; print_cnf t) ();;
 
-let rec occur_check x = function
-  | Var y -> y = x
-  | Fn (_, l) -> List.exists (occur_check x) l;;
+let rec occurs_check s x = function
+  | Var y -> y = x || (Hashtbl.mem s y && occurs_check s x (Hashtbl.find s y))
+  | Fn (_, l) -> List.exists (occurs_check s x) l;;
 
 let unify_find_naive s = function
   | Var u when Hashtbl.mem s u -> Hashtbl.find s u
@@ -434,11 +434,8 @@ let rec unify_var_naive s p q = match unify_find_naive s p, unify_find_naive s q
   | Var u, Var v when u = v -> true
   | Var u, v | v, Var u ->
     if Hashtbl.mem s u then unify_var_naive s (Hashtbl.find s u) v
-    else if not (occur_check u v) then
-      begin
-        Hashtbl.add s u v;
-        true
-      end
+    else if not (occurs_check s u v) then
+        (Hashtbl.add s u v; true)
     else false
   | Fn (fp, lp), Fn (fq, lq) -> fp = fq && unify_list_naive s lp lq
 and unify_list_naive s lp lq =
