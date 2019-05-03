@@ -33,8 +33,6 @@ type 'a tree_l = T_l of 'a * 'a tree_l list * float;;
 
 type dsu = { mutable p : int; mutable r : int };;
 
-let symbols_list = ["false"; "true"; "not"; "and"; "or"; "imp"; "iff"; "forall"; "exists"];;
-
 let apply f (s, r) = (f s, r);;
 
 let parse_bracket p r =
