@@ -45,11 +45,11 @@ let rec parse_tuple acc p = function
   | r -> let f, r = p r in
     parse_tuple (f::acc) p r;;
 
-let rec parse_variables h vars p forall = function
+let rec parse_variables h vars p b = function
   | "."::r -> p h vars r
   | n::r -> if not (Hashtbl.mem h n) then Hashtbl.add h n (Hashtbl.length h);
-    apply (fun f -> let n = Hashtbl.find h n in if forall then Forall (n, f) else Exists (n, f))
-      (parse_variables h (n::vars) p forall r)
+    apply (fun f -> let n = Hashtbl.find h n in if b then Forall (n, f) else Exists (n, f))
+      (parse_variables h (n::vars) p b r)
   | _ -> failwith "bound variables";;
 
 let rec parse_term h vars = function
@@ -147,53 +147,54 @@ let parenthesize print x =
 let rec print_term = function
   | Var v -> print_string "V"; print_int v
   | Fn (f, l) -> print_string f;
-    if l <> [] then parenthesize (List.iter print_term) l;;
+    if l <> [] then parenthesize print_term_list l;;
+and print_term_list = function
+  | [] -> ()
+  | [p] -> print_term p
+  | h::t -> print_term h; print_string " "; print_term_list t;;
 
-let print_atom = function
-  | P (n, l) -> print_string n;
-    if l <> [] then parenthesize (List.iter print_term) l;;
+let print_atom p = print_term (term_of_atom p);;
 
 let rec print = function
-  | False -> print_string "False"
-  | True -> print_string "True"
+  | False -> print_string "FALSE"
+  | True -> print_string "TRUE"
   | Atom a -> print_atom a
-  | Not f -> print_string "NOT";
-    print f
+  | Not f (Atom a) -> print_string "NOT "; print_atom a
+  | Not f -> print_string "NOT"; parenthesize print f
   | And (f, g) -> parenthesize print f;
-    print_string "AND";
+    print_string " AND ";
     parenthesize print g
   | Or (f, g) -> parenthesize print f;
-    print_string "OR";
+    print_string " OR ";
     parenthesize print g
   | Imp (f, g) -> parenthesize print f;
-    print_string "IMP";
+    print_string " IMP ";
     parenthesize print g
   | Iff (f, g) -> parenthesize print f;
-    print_string "IFF";
+    print_string " IFF ";
     parenthesize print g
-  | Forall (v, f) -> print_string ("FORALL " ^ (string_of_int v) ^ ".");
+  | Forall (v, f) -> print_string ("FORALL V" ^ (string_of_int v) ^ ".");
     print f
-  | Exists (v, f) -> print_string ("EXISTS " ^ (string_of_int v) ^ ".");
+  | Exists (v, f) -> print_string ("EXISTS V" ^ (string_of_int v) ^ ".");
     print f;;
 
-let rec term_to_fol = function
+let rec tree_of_term = function
   | Var v -> T ("V" ^ (string_of_int v), [])
-  | Fn (f, l) -> T (f, List.map term_to_fol l);;
+  | Fn (f, l) -> T (f, List.map tree_of_term l);;
 
-let atom_to_fol = function
-  | P (n, l) -> T (n, List.map term_to_fol l);;
+let tree_of_atom p = tree_of_term (term_of_atom p);;
 
-let rec fol_to_tree = function
+let rec tree_of_fol = function
   | False -> T ("false", [])
   | True -> T ("true", [])
   | Atom a -> atom_to_fol a
-  | Not f -> T ("not", [fol_to_tree f])
-  | And (f, g) -> T ("and", [fol_to_tree f; fol_to_tree g])
-  | Or (f, g) -> T ("or", [fol_to_tree f; fol_to_tree g])
-  | Imp (f, g) -> T ("imp", [fol_to_tree f; fol_to_tree g])
-  | Iff (f, g) -> T ("iff", [fol_to_tree f; fol_to_tree g])
-  | Forall (v, f) -> T ("forall " ^ (string_of_int v), [fol_to_tree f])
-  | Exists (v, f) -> T ("exists " ^ (string_of_int v), [fol_to_tree f]);;
+  | Not f -> T ("not", [tree_of_fol f])
+  | And (f, g) -> T ("and", [tree_of_fol f; tree_of_fol g])
+  | Or (f, g) -> T ("or", [tree_of_fol f; tree_of_fol g])
+  | Imp (f, g) -> T ("imp", [tree_of_fol f; tree_of_fol g])
+  | Iff (f, g) -> T ("iff", [tree_of_fol f; tree_of_fol g])
+  | Forall (v, f) -> T ("forall V" ^ (string_of_int v), [tree_of_fol f])
+  | Exists (v, f) -> T ("exists V" ^ (string_of_int v), [tree_of_fol f]);;
 
 let rec tree_height (T (_, l)) = List.fold_left (fun a b -> max a (tree_height b)) (-1) l + 1;;
 
@@ -255,7 +256,7 @@ let rec nnf neg = function
   | False -> if neg then True else False
   | True -> if neg then False else True
   | Atom a -> if neg then Not (Atom a) else Atom a
-  | Not f -> if neg then f else nnf true f
+  | Not f -> nnf (not neg) f
   | And (a, b) -> if neg then Or (nnf true a, nnf true b)
     else And (nnf false a, nnf false b)
   | Or (a, b) -> if neg then And (nnf true a, nnf true b)
@@ -271,9 +272,23 @@ let rec nnf neg = function
 
 let to_nnf f = nnf false (parse f);;
 
+let term_from_atom = function
+  | P (n, l) -> Fn (n, l);;
+
 let apply_literal f = function
   | L p -> L (f p)
   | NL p -> NL (f p);;
+
+let is_literal_positive = function
+  | L _ -> true;
+  | NL _ -> false;;
+
+let atom_from_literal = function
+  | L p | NL p -> p;;
+
+let negate_literal = function
+  | L p -> NL p
+  | NL p -> L p;;
 
 let rec substitute_term s = function
   | Var x -> s x
@@ -285,35 +300,30 @@ let rec substitute_atom s = function
 let substitute_literal s = apply_literal (substitute_atom s);;
 
 let substitute_clause s =
-  List.fold_left (fun a b -> substitute_literal s b::a);;
+  List.map (substitute_literal s);;
 
 let substitute_from_hashtbl s =
   fun x -> if Hashtbl.mem s x then Hashtbl.find s x else Var x;;
 
 let rec max_variable_term = function
-  | Var v -> v
+  | Var x -> x
   | Fn (_, l) -> List.fold_left (fun a b -> max a (max_variable_term b)) (-1) l;;
 
-let rec max_variable_atom = function
-  | P (_, l) -> List.fold_left (fun a b -> max a (max_variable_term b)) (-1) l;;
+let rec max_variable_atom p = max_variable_term (term_from_atom p);;
 
 let rec max_variable_clause = function
   | [] -> -1
-  | L p::l | NL p::l -> max (max_variable_atom p) (max_variable_clause l);;
+  | p::l -> max (max_variable_atom (atom_of_literal p)) (max_variable_clause l);;
 
 let rec non_variable_count_term = function
   | Var _ -> 0
   | Fn (_, l) -> List.fold_left (fun a b -> non_variable_count_term b + a) 1 l;;
 
-let non_variable_count_atom = function
-  | P (_, l) -> List.fold_left (fun a b -> non_variable_count_term b + a) 1 l;;
+let non_variable_count_atom p = non_variable_count (term_from_atom p);;
 
 let rec non_variable_count_clause = function
   | [] -> 0
-  | L p::l | NL p::l -> (non_variable_count_atom p) + (non_variable_count_clause l);;
-
-let term_from_atom = function
-  | P (n, l) -> Fn (n, l);;
+  | p::l -> (non_variable_count_atom (atom_of_literal p)) + (non_variable_count_clause l);;
 
 let rec rename_term rewrite = function
   | Var v -> Var (Hashtbl.find rewrite v)
@@ -322,19 +332,13 @@ let rec rename_term rewrite = function
 let rec rename_atom rewrite = function
   | P (n, l) -> P (n, List.map (rename_term rewrite) l);;
 
-let rec rename_literal rewrite = function
-  | L p -> L (rename_atom rewrite p)
-  | NL p -> NL (rename_atom rewrite p);;
-
-let rename_clause = List.map (rename_literal (Hashtbl.create 0));;
-
 let rename f =
   let c = ref 0 in
   let rewrite = Hashtbl.create 0 in
   let rec aux = function
     | False -> False
     | True -> True
-    | Atom (P(n, l)) -> Atom (P(n, List.map (rename_term rewrite) l))
+    | Atom a -> Atom (rewrite_atom rewrite a)
     | Not f -> Not (aux f)
     | And (a, b) -> let a = aux a and b = aux b in And (a, b)
     | Or (a, b) -> let a = aux a and b = aux b in Or (a, b)
@@ -373,7 +377,7 @@ let rec rem_quantifiers = function
   | False -> False
   | True -> True
   | Atom a -> Atom a
-  | Not f -> Not (rem_quantifiers f)
+  | Not (Atom a) -> Not (Atom a)
   | And (a, b) -> And (rem_quantifiers a, rem_quantifiers b)
   | Or (a, b) -> Or (rem_quantifiers a, rem_quantifiers b)
   | Forall (v, f) -> rem_quantifiers f
@@ -384,7 +388,8 @@ let to_rem_quantifiers f = rem_quantifiers (to_skolemization f);;
 let rec distribute = function
   | And (a, b) -> And (distribute a, distribute b)
   | Or (a, b) -> (match distribute a, distribute b with
-      | And (c, d), e | e, And (c, d) -> And (distribute (Or(c, e)), distribute (Or(d, e)))
+      | And (c, d), e -> And (distribute (Or (c, e)), distribute (Or (d, e)))
+      | c, And (d, e) -> And (distribute (Or(c, d)), distribute (Or(c, e)))
       | _ -> Or (a, b))
   | f -> f;;
 
@@ -410,12 +415,12 @@ let print_literal = function
 let rec print_clause = function
   | [] -> ()
   | [p] -> print_literal p
-  | p::t -> print_literal p; print_string " OR "; print_clause t;;
+  | p::t -> parenthesize (fun _ -> print_literal p; print_string " OR "; print_clause t) ();;
 
 let rec print_cnf = function
   | [] -> ()
   | [c] -> print_clause c
-  | c::t -> print_clause c; print_string " AND "; print_cnf t;;
+  | c::t -> parenthesize (fun _ -> print_clause c; print_string " AND "; print_cnf t) ();;
 
 let rec occur_check x = function
   | Var y -> y = x
@@ -604,17 +609,6 @@ let unify_routine g p q b =
       unify_terms g p q
   end;;
 
-let is_literal_positive = function
-  | L _ -> true;
-  | NL _ -> false;;
-
-let atom_from_literal = function
-  | L p | NL p -> p;;
-
-let negate_literal = function
-  | L p -> NL p
-  | NL p -> L p;;
-
 let rec pack_term g c = function
   | Var x -> if g.(x).m <> 3 then
       begin
@@ -645,7 +639,7 @@ let rec find_unifiable g acc hp p tp hq = function
   | [] -> acc
   | q::tq -> if is_literal_positive p = is_literal_positive q then
       begin
-        let b = unify_routine !g (atom_from_literal p) (atom_from_literal q) true in
+        let b = unify_routine !g (atom_of_literal p) (atom_of_literal q) true in
         if b then
           begin
             let s = (fun x -> match !g.(2 * x).n with T t -> t | _ -> Var (2 * x)) in
@@ -682,7 +676,7 @@ let rec find_factor g acc hp p = function
   | [] -> acc
   | q::tp -> if is_literal_positive p = is_literal_positive q then
       begin
-        let b = unify_routine !g (atom_from_literal p) (atom_from_literal q) false in
+        let b = unify_routine !g (atom_of_literal p) (atom_of_literal q) false in
         if b then
           begin
             let s = (fun x -> match !g.(x).n with T t -> t | _ -> Var x) in
