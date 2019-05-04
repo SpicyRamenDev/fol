@@ -27,11 +27,23 @@ type clause = literal list;;
 
 type cnf = clause list;;
 
-type 'a tree = T of 'a * 'a tree list;;
+type 'a tree = Tree of 'a * 'a tree list;;
 
-type 'a tree_l = T_l of 'a * 'a tree_l list * float;;
+type 'a tree_l = Tree_l of 'a * 'a tree_l list * float;;
 
 type dsu = { mutable p : int; mutable r : int };;
+
+type node = Nil | V of int | NV of string * int list | T of term;;
+
+type graph = { mutable n : node; mutable p : int; mutable r : int; mutable m : int };;
+
+type global = { mutable graph : graph array; mutable max : int; mutable vars : int list };;
+
+let graph_default i = {n=Nil; p=i; r=0; m=(-1)};;
+
+let graph_make n = Array.init n graph_default;;
+
+let global_make n = { graph = graph_make n; max = -1; vars = [] };;
 
 let apply f (s, r) = (f s, r);;
 
@@ -197,24 +209,24 @@ let rec print = function
     print f;;
 
 let rec tree_of_term = function
-  | Var v -> T ("V" ^ (string_of_int v), [])
-  | Fn (f, l) -> T (f, List.map tree_of_term l);;
+  | Var v -> Tree ("V" ^ (string_of_int v), [])
+  | Fn (f, l) -> Tree (f, List.map tree_of_term l);;
 
 let tree_of_atom p = tree_of_term (term_of_atom p);;
 
 let rec tree_of_fol = function
-  | False -> T ("false", [])
-  | True -> T ("true", [])
+  | False -> Tree ("false", [])
+  | True -> Tree ("true", [])
   | Atom a -> tree_of_atom a
-  | Not f -> T ("not", [tree_of_fol f])
-  | And (f, g) -> T ("and", [tree_of_fol f; tree_of_fol g])
-  | Or (f, g) -> T ("or", [tree_of_fol f; tree_of_fol g])
-  | Imp (f, g) -> T ("imp", [tree_of_fol f; tree_of_fol g])
-  | Iff (f, g) -> T ("iff", [tree_of_fol f; tree_of_fol g])
-  | Forall (v, f) -> T ("forall V" ^ (string_of_int v), [tree_of_fol f])
-  | Exists (v, f) -> T ("exists V" ^ (string_of_int v), [tree_of_fol f]);;
+  | Not f -> Tree ("not", [tree_of_fol f])
+  | And (f, g) -> Tree ("and", [tree_of_fol f; tree_of_fol g])
+  | Or (f, g) -> Tree ("or", [tree_of_fol f; tree_of_fol g])
+  | Imp (f, g) -> Tree ("imp", [tree_of_fol f; tree_of_fol g])
+  | Iff (f, g) -> Tree ("iff", [tree_of_fol f; tree_of_fol g])
+  | Forall (v, f) -> Tree ("forall V" ^ (string_of_int v), [tree_of_fol f])
+  | Exists (v, f) -> Tree ("exists V" ^ (string_of_int v), [tree_of_fol f]);;
 
-let rec tree_height (T (_, l)) = List.fold_left (fun a b -> max a (tree_height b)) (-1) l + 1;;
+let rec tree_height (Tree (_, l)) = List.fold_left (fun a b -> max a (tree_height b)) (-1) l + 1;;
 
 let layout_compact t =
   let rec min_l m = function
@@ -228,7 +240,7 @@ let layout_compact t =
   and dist a b = match a,b with
     | e, [] | [], e -> 0.
     | (_, lr)::ta, (rl, _)::tb -> max (1.+.lr-.rl) (dist ta tb)
-  and move d = function T_l (v, t, x) -> T_l (v, t, x+.d)
+  and move d = function Tree_l (v, t, x) -> Tree_l (v, t, x+.d)
   and center = function
     | [] -> 0.
     | (l, r)::_ -> (l+.r)*.0.5
@@ -240,10 +252,10 @@ let layout_compact t =
       let dt = dist e eh in
       prop ((move dt h)::t) (merge e eh dt) u
   and aux = function
-    | T (v, []) -> T_l (v, [], 0.), [(0., 0.)]
-    | T (v, t) ->
+    | Tree (v, []) -> Tree_l (v, [], 0.), [(0., 0.)]
+    | Tree (v, t) ->
       let t, e = prop [] [] t in
-      T_l (v, t, 0.), (0., 0.)::e in
+      Tree_l (v, t, 0.), (0., 0.)::e in
   let layout, e = aux t in
   move (-.(min_l 0. e)) layout;;
 
@@ -251,7 +263,7 @@ let disp_layout s h o t =
   open_graph "";
   let n = tree_height t in
   let rec aux x0 m = function
-    | T_l (v,t,x) ->
+    | Tree_l (v,t,x) ->
       moveto (int_of_float (s*.(x0+.x))) (3*h*m);
       draw_string v;
       moveto (int_of_float (s*.(x0+.x))) (h*(3*m+1));
@@ -464,11 +476,6 @@ let print_hashtbl = Hashtbl.iter (fun x y -> print_string ("V" ^ (string_of_int 
                                    print_term y;
                                    print_newline ());;
 
-
-type node = Nil | V of int | NV of string * int list | T of term;;
-
-type graph = { mutable n : node; mutable p : int; mutable r : int; mutable m : int };;
-
 let rec dsu_find g x =
   if g.(x).p <> x then g.(x).p <- dsu_find g g.(x).p;
   g.(x).p;;
@@ -488,25 +495,19 @@ let dsu_union g a b =
         end
     end;;
 
-let graph_default i = {n=Nil; p=i; r=0; m=(-1)};;
-
-let graph_make n = Array.init n graph_default;;
-
-let rec vars_from_term g c vars = function
-  | Var x -> if g.(x).m = -1 then
+let rec vars_from_term g = function
+  | Var x -> if g.graph.(x).m = -1 then
       begin
-        c := max !c (x + 1);
-        g.(x).m <- 0;
-        x::vars
+        g.max <- max g.max (x + 1);
+        g.graph.(x).m <- 0;
+        g.vars <- x::g.vars
       end
-    else
-      vars
-  | Fn (_ , l) -> List.fold_left (vars_from_term g c) vars l;;
+  | Fn (_ , l) -> List.iter (vars_from_term g) l;;
 
-let rec graph_from_term g c = function
+let rec graph_from_term g = function
   | Var x -> x
-  | Fn (f, l) -> let d = !c in incr c; g.(d).m <- 0;
-    g.(d).n <- NV (f, List.map (graph_from_term g c) l); d;;
+  | Fn (f, l) -> g.max <- g.max + 1; let d = g.max in g.graph.(d).m <- 0;
+    g.graph.(d).n <- NV (f, List.map (graph_from_term g) l); d;;
 
 let unify_find g x =
   let x = dsu_find g x in
@@ -525,37 +526,40 @@ and unify_list g r s =
   List.length r = List.length s && List.for_all2 (unify g) r s;;
 
 let acyclic g =
+  let next x =
+    let x = dsu_find g x in
+    match g.(x) with
+    | {n=V y} -> y
+    | _ -> x in
   let rec dfs x =
     if g.(x).m = 0 then
       begin
         g.(x).m <- 1;
         let b = (match g.(x).n with
             | NV (_, l) -> List.for_all dfs l
-            | _ -> let y = unify_find g x in x = y || dfs y) in
+            | _ -> let y = next x in x = y || dfs y) in
         g.(x).m <- 2; b
       end
     else g.(x).m = 2 in
   List.for_all dfs;;
 
-let rec reconstruct g v b r s =
-  let rec aux x = match g.(x).n with
+let rec reconstruct g =
+  let next x =
+    let x = dsu_find g.graph x in
+    match g.graph.(x) with
+    | {n=V y} -> y
+    | _ -> x in
+  let rec aux x = match g.graph.(x).n with
     | T t -> t
     | NV (f, l) -> let t = Fn (f, List.map aux l) in
-      g.(x).n <- T t; t
-    | _ -> let y = unify_find g x in
+      g.graph.(x).n <- T t; t
+    | _ -> let y = next x in
       if y = x then
         Var x
       else
         (let t = aux y in
-         g.(x).n <- T t; t) in
-  if b then
-    List.iter (fun x -> ignore (aux x)) v;
-  for i = r to s - 1 do
-    g.(i) <- graph_default i
-  done;
-  if not b then
-    List.iter (fun i -> g.(i) <- graph_default i) v;
-  b;;
+         g.graph.(x).n <- T t; t) in
+  List.iter (fun x -> ignore (aux x)) g.vars;;
 
 let rec unify_fast p q = match p, q with
   | Var _, _ | _, Var _ -> true
@@ -564,29 +568,35 @@ and unify_list_fast r s =
   List.length r = List.length s && List.for_all2 unify_fast r s;;
 
 let unify_terms g p q =
-  let c = ref 0 in
-  let vars = vars_from_term g c (vars_from_term g c [] p) q in
-  let r = graph_from_term g c p and s = graph_from_term g c q in
-  let b = unify g r s && acyclic g vars in
-  reconstruct g vars b r !c;;
+  g.max <- -1; g.vars <- [];
+  vars_from_term g p; vars_from_term g q;
+  let r = graph_from_term g p and s = graph_from_term g q in
+  let b = unify g.graph r s && acyclic g.graph g.vars in
+  if b then
+    reconstruct g
+  else
+    (List.iter (fun i -> g.graph.(i) <- graph_default i) g.vars; g.vars <- []);
+  for i = r to g.max do
+    g.graph.(i) <- graph_default i
+  done;
+  g.max <- -1;
+  b;;
 
 let unify_bool g p q =
-  let c = ref 0 in
-  let vars = vars_from_term g c (vars_from_term g c [] p) q in
-  let r = graph_from_term g c p and s = graph_from_term g c q in
-  let b = unify g r s && acyclic g vars in
-  List.iter (fun x -> g.(x) <- graph_default x) vars;
-  for i = r to !c - 1 do
-    g.(i) <- graph_default i
+  g.max <- -1; g.vars <- [];
+  vars_from_term g p; vars_from_term g q;
+  let r = graph_from_term g p and s = graph_from_term g q in
+  let b = unify g.graph r s && acyclic g.graph g.vars in
+  List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars;
+  g.vars <- [];
+  for i = r to g.max do
+    g.graph.(i) <- graph_default i
   done;
+  g.max <- -1;
   b;;
 
 let unify_atom_bool g p q = match p, q with
   | P (m, r), P (n, s) -> unify_bool g (Fn (m, r)) (Fn (n, s));;
-
-let unify_literal_bool g p q = match p, q with
-  | L p, L q | NL p, NL q -> unify_atom_bool g p q
-  | _ -> false;;
 
 let unify_atoms g p q =
   let p, q = term_of_atom p, term_of_atom q in
@@ -606,126 +616,59 @@ let unify_routine g p q b =
       unify_terms g p q
   end;;
 
-let rec pack_term g c = function
-  | Var x -> if g.(x).m <> 3 then
+let rec pack_term g = function
+  | Var x -> if g.graph.(x).m <> 3 then
       begin
-        let t = Var !c in incr c;
-        g.(x).n <- T t;
-        g.(x).m <- 3;
+        g.graph.(x).m <- 3;
+        g.max <- g.max + 1;
+        g.vars <- x::g.vars;
+        let t = Var g.max in
+        g.graph.(x).n <- T t;
       end;
-    (match g.(x).n with T t -> t | _ -> failwith "pack_term")
-  | Fn (f, l) -> Fn (f, List.map (pack_term g c) l);;
+    (match g.graph.(x).n with T t -> t | _ -> failwith "pack_term")
+  | Fn (f, l) -> Fn (f, List.map (pack_term g) l);;
 
-let pack_atom g c = function
-  | P (n, l) -> P (n, List.map (pack_term g c) l);;
+let pack_atom g = function
+  | P (n, l) -> P (n, List.map (pack_term g) l);;
 
-let pack_literal g c = function
-  | L p -> L (pack_atom g c p)
-  | NL p -> NL (pack_atom g c p);;
+let pack_literal g = apply_literal (pack_atom g);;
 
-let pack_clause g c = List.fold_left (fun a b -> pack_literal g c b::a);;
+let pack_clause g =
+  g.max <- -1; g.vars <- [];
+  let c = List.map (pack_literal g) in
+  List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars;
+  g.vars <- []; g.max <- -1;
+  c;;
 
-let rec simplify_clause acc = function
-  | [] -> acc
+let rec simplify_clause = function
+  | [] -> []
   | h::t -> if List.mem h t then
-      simplify_clause acc t
+      simplify_clause t
     else
-      simplify_clause (h::acc) t;;
+      h::simplify_clause t;;
 
-let rec find_unifiable g acc hp p tp hq = function
-  | [] -> acc
-  | q::tq -> if is_literal_positive p = is_literal_positive q then
-      begin
-        let b = unify_routine !g (atom_of_literal p) (atom_of_literal q) true in
-        if b then
-          begin
-            let s = (fun x -> match !g.(2 * x).n with T t -> t | _ -> Var (2 * x)) in
-            let t = (fun x -> match !g.(2 * x + 1).n with T t -> t | _ -> Var (2 * x + 1)) in
-            let u = substitute_clause s hp@substitute_clause s tp in
-            let v = substitute_clause t hq@substitute_clause t tq in
-            let c = ref 0 in
-            let r = simplify_clause [] (pack_clause !g c (pack_clause !g c [] u) v) in
-            let n = max (max_variable_clause (p::u)) (max_variable_clause (q::v)) in
-            let m = max (non_variable_count_clause (p::u)) (non_variable_count_clause (q::v)) in
-            if 2 * (m + !c + 1) > Array.length !g then
-              g := graph_make (4 * (m + !c + 1))
-            else
-              begin
-                for i = 0 to 2 * n + 1 do
-                  !g.(i) <- graph_default i
-                done;
-              end;
-            find_unifiable g (r::acc) hp p tp (q::hq) tq
-          end
-        else
-          find_unifiable g acc hp p tp (q::hq) tq
-      end
-    else
-      find_unifiable g acc hp p tp (q::hq) tq;;
-
-let rec find_all_unifiable g acc hp cp cq = match cp with
-  | [] -> acc
-  | p::tp -> find_all_unifiable g
-               (find_unifiable g acc hp (negate_literal p) tp [] cq)
-               (p::hp) tp cq;;
-
-let rec find_factor g acc hp p = function
-  | [] -> acc
-  | q::tp -> if is_literal_positive p = is_literal_positive q then
-      begin
-        let b = unify_routine !g (atom_of_literal p) (atom_of_literal q) false in
-        if b then
-          begin
-            let s = (fun x -> match !g.(x).n with T t -> t | _ -> Var x) in
-            let u = substitute_clause s hp@substitute_clause s tp in
-            let c = ref 0 in
-            let r = simplify_clause [] (pack_clause !g c [] u) in
-            let n = max_variable_clause u in
-            let m = non_variable_count_clause u in
-            if 2 * (m + !c + 1) > Array.length !g then
-              g := graph_make (4 * (m + !c + 1))
-            else
-              begin
-                for i = 0 to 2 * n + 1 do
-                  !g.(i) <- graph_default i
-                done;
-              end;
-            find_factor g (r::acc) (q::hp) p tp
-          end
-        else
-          find_factor g acc (q::hp) p tp
-      end
-    else
-      find_factor g acc (q::hp) p tp;;
-
-let rec find_all_factors g acc hp = function
-  | [] -> acc
-  | p::tp -> find_all_factors g
-               (find_factor g acc hp p tp)
-               (p::hp) tp;;
-
-let rec subsumes_unify g vars p q = match p, q with
-  | Var x, t -> (match g.(x).n with
-      | Nil -> g.(x).n <- T t; vars := x::!vars; true
+let rec subsumes_unify g p q = match p, q with
+  | Var x, t -> (match g.graph.(x).n with
+      | Nil -> g.graph.(x).n <- T t; g.vars <- x::g.vars; true
       | T u when t = u -> true
       | _ -> false)
   | Fn (f, r), Fn (h, s) when f = h && List.length r = List.length s ->
-    List.for_all2 (subsumes_unify g vars) r s
+    List.for_all2 (subsumes_unify g) r s
   | _ -> false;;
 
-let subsumes_atom g vars p q = match p, q with
-  | P (m, r), P (n, s) -> subsumes_unify g vars (Fn (m, r)) (Fn (n, s));;
+let subsumes_atom g p q =
+  subsumes_unify g (term_of_atom p) (term_of_atom q);;
 
-let subsumes_literal g vars p q = match p, q with
-  | L p, L q | NL p, NL q -> subsumes_atom g vars p q
+let subsumes_literal g p q = match p, q with
+  | L p, L q | NL p, NL q -> subsumes_atom g p q
   | _ -> false;;
 
 let rec subsumes g cp cq = match cp with
   | [] -> true
   | p::tp -> List.exists (fun q ->
-      let v = ref [] in
-      let b = subsumes_literal g v p q && subsumes g tp cq in
-      List.iter (fun x -> g.(x).n <- Nil) !v; b) cq;;
+      g.vars <- [];
+      let b = subsumes_literal g p q && subsumes g tp cq in
+      List.iter (fun x -> g.graph.(x).n <- Nil) g.vars; g.vars <- []; b) cq;;
 
 let pure_clause g cp s =
   let rec aux = function
@@ -736,8 +679,6 @@ let pure_clause g cp s =
 let rec tautology = function
   | [] -> false
   | h::t -> List.mem (negate_literal h) t || tautology t;;
-
-let simplify g v = List.exists (fun p -> subsumes g p v);;
 
 let remove_subsumed g v = List.filter (fun p -> not (subsumes g v p));;
 
@@ -756,17 +697,57 @@ let rec insert_null g u t w = match t with
   | [] -> [w]
   | h::t -> h::insert g u t w;;
 
+let rec resolve g acc u h = function
+  | [] -> let h = simplify_clause h in
+    let h = pack_clause g h in
+    let m = max_variable_clause h in
+    let n = non_variable_count_clause h in
+    if 2*(m+n+1) > Array.length g.graph then
+      g.graph <- graph_make (4*(m+n+1));
+    h::acc
+  | (p, b)::t -> if b = (is_literal_positive p = is_literal_positive u) &&
+                    unify_routine g (atom_of_literal p) (atom_of_literal u) false then
+      begin
+        let s = (fun x -> match g.graph.(x).n with T t -> t | _ -> Var x) in
+        let h2 = substitute_clause s h in
+        let t2 = List.map (apply (substitute_literal s)) t in
+        let u2 = substitute_literal s u in
+        List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars;
+        g.vars <- [];
+        resolve g (resolve g acc u (p::h) t) u2 h2 t2
+      end
+    else
+      resolve g acc u (p::h) t;;
+
+let rec resolve_binary g acc hp tp hq tq = match tp, tq with
+  | [], _ -> acc
+  | p::tp, [] -> resolve_binary g acc (p::hp) tp [] hq
+  | p::tp, q::tq -> if is_literal_positive p <> is_literal_positive q &&
+                       unify_routine g (atom_of_literal p) (atom_of_literal q) true then
+      begin
+        let s = (fun x -> match g.graph.(2*x).n with T t -> t | _ -> Var (2*x)) in
+        let t = (fun x -> match g.graph.(2*x+1).n with T t -> t | _ -> Var (2*x+1)) in
+        let u = substitute_literal s p in
+        let h = substitute_clause s hp@substitute_clause t hq in
+        let t = List.map (fun p -> p, true) (substitute_clause s tp)@
+                List.map (fun p -> p, false) (substitute_clause t tq) in
+        List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars;
+        g.vars <- [];
+        resolve_binary g (resolve g acc u h t) hp (p::tp) (q::hq) tq
+      end
+    else
+      resolve_binary g acc hp (p::tp) (q::hq) tq;;
+
 let resolution_step g u v t =
-  let w = List.fold_left (fun a b -> find_all_unifiable g [] [] b v@a) [] u in
-  let w = find_all_factors g [] [] v@w in
-  v::u, List.fold_left (insert !g (v::u)) t w;;
+  let w = List.fold_left (fun a b -> resolve_binary g a [] v [] b) [] u in
+  v::u, List.fold_left (insert g (v::u)) t w;;
 
 let resolution g v =
   let u = ref [] and v = ref v in
   while not (List.mem [] !u) && !v <> [] do
     print_int (List.length !u); print_string ";\t";
     print_int (List.length !v); print_string ";\t";
-    print_int (Array.length !g); print_newline ();
+    print_int (Array.length g.graph); print_newline ();
     let h::t = !v in
     let a, b = resolution_step g !u h t in
     u := a;
@@ -775,7 +756,7 @@ let resolution g v =
   !u, !v;;
 
 let preprocess g u =
-  List.fold_left (insert !g []) [] (List.map (simplify_clause []) u);;
+  List.fold_left (insert g []) [] (List.map simplify_clause u);;
 
 let preprocess_null g u = u;;
 
@@ -783,6 +764,6 @@ let to_resolution s =
   let f = to_cnf s in
   let n = List.fold_left (fun a b ->
       max ((max_variable_clause b) + (non_variable_count_clause b)) a) 0 f in
-  let g = ref (graph_make (4 * (n + 1))) in
+  let g = global_make (4 * (n + 1)) in
   let u = preprocess g f in
   resolution g u;;
