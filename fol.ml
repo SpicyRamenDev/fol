@@ -35,11 +35,11 @@ type dsu = { mutable p : int; mutable r : int };;
 
 type node = Nil | V of int | NV of string * int list | T of term;;
 
-type graph = { mutable n : node; mutable p : int; mutable r : int; mutable m : int };;
+type graph = { mutable n : node; mutable p : int; mutable r : int };;
 
 type global = { mutable graph : graph array; mutable max : int; mutable vars : int list };;
 
-let graph_default i = {n=Nil; p=i; r=0; m=(-1)};;
+let graph_default i = { n = Nil; p = i; r = -1};;
 
 let graph_make n = Array.init n graph_default;;
 
@@ -67,7 +67,7 @@ let negate_literal = function
 
 let parse_bracket p r =
   let f, r = p r in
-  match r with | ")"::_ -> f, List.tl r
+  match r with | ")"::r -> f, r
                | _ -> failwith "closing bracket expected";;
 
 let rec parse_tuple acc p = function
@@ -151,8 +151,8 @@ let rec update_stack ops forms p = match ops with
   | _ -> failwith "update_stack";;
 
 let rec parse_stack ops forms h vars = function
-  | [] as r | ")"::r -> List.hd (snd (update_stack ops forms (-1))), r
-  | "("::r -> let f, r = parse_stack [] [] h vars r in
+  | [] | ")"::_ as r -> List.hd (snd (update_stack ops forms (-1))), r
+  | "("::r -> let f, r = parse_bracket (parse_stack [] [] h vars) r in
     parse_stack ops (f::forms) h vars r
   | "forall"::r -> let f, r = parse_variables h vars (parse_stack [] []) true r in
     parse_stack ops (f::forms) h vars r
@@ -260,7 +260,7 @@ let layout_compact t =
   move (-.(min_l 0. e)) layout;;
 
 let disp_layout s h o t =
-  open_graph "";
+  open_graph " 1600x720";
   let n = tree_height t in
   let rec aux x0 m = function
     | Tree_l (v,t,x) ->
@@ -496,17 +496,17 @@ let dsu_union g a b =
     end;;
 
 let rec vars_from_term g = function
-  | Var x -> if g.graph.(x).m = -1 then
+  | Var x -> if g.graph.(x).r = -1 then
       begin
         g.max <- max g.max (x + 1);
-        g.graph.(x).m <- 0;
+        g.graph.(x).r <- 0;
         g.vars <- x::g.vars
       end
   | Fn (_ , l) -> List.iter (vars_from_term g) l;;
 
 let rec graph_from_term g = function
   | Var x -> x
-  | Fn (f, l) -> g.max <- g.max + 1; let d = g.max in g.graph.(d).m <- 0;
+  | Fn (f, l) -> g.max <- g.max + 1; let d = g.max in g.graph.(d).r <- 0;
     g.graph.(d).n <- NV (f, List.map (graph_from_term g) l); d;;
 
 let unify_find g x =
@@ -532,22 +532,22 @@ let acyclic g =
     | {n=V y} -> y
     | _ -> x in
   let rec dfs x =
-    if g.(x).m = 0 then
+    if g.(x).r >= 0 then
       begin
-        g.(x).m <- 1;
+        g.(x).r <- -1;
         let b = (match g.(x).n with
             | NV (_, l) -> List.for_all dfs l
             | _ -> let y = next x in x = y || dfs y) in
-        g.(x).m <- 2; b
+        g.(x).r <- -2; b
       end
-    else g.(x).m = 2 in
+    else g.(x).r = -2 in
   List.for_all dfs;;
 
 let rec reconstruct g =
   let next x =
     let x = dsu_find g.graph x in
     match g.graph.(x) with
-    | {n=V y} -> y
+    | { n = V y} -> y
     | _ -> x in
   let rec aux x = match g.graph.(x).n with
     | T t -> t
@@ -575,7 +575,7 @@ let unify_terms g p q =
   if b then
     reconstruct g
   else
-    (List.iter (fun i -> g.graph.(i) <- graph_default i) g.vars; g.vars <- []);
+    (List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars; g.vars <- []);
   for i = r to g.max do
     g.graph.(i) <- graph_default i
   done;
@@ -617,15 +617,10 @@ let unify_routine g p q b =
   end;;
 
 let rec pack_term g = function
-  | Var x -> if g.graph.(x).m <> 3 then
-      begin
-        g.graph.(x).m <- 3;
-        g.max <- g.max + 1;
-        g.vars <- x::g.vars;
-        let t = Var g.max in
-        g.graph.(x).n <- T t;
-      end;
-    (match g.graph.(x).n with T t -> t | _ -> failwith "pack_term")
+  | Var x -> (match g.graph.(x).n with
+      | T t -> t
+      | _ -> g.max <- g.max + 1; g.vars <- x::g.vars;
+        g.graph.(x).n <- T (Var g.max); Var g.max)
   | Fn (f, l) -> Fn (f, List.map (pack_term g) l);;
 
 let pack_atom g = function
@@ -633,9 +628,9 @@ let pack_atom g = function
 
 let pack_literal g = apply_literal (pack_atom g);;
 
-let pack_clause g =
+let pack_clause g c =
   g.max <- -1; g.vars <- [];
-  let c = List.map (pack_literal g) in
+  let c = List.map (pack_literal g) c in
   List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars;
   g.vars <- []; g.max <- -1;
   c;;
@@ -647,40 +642,32 @@ let rec simplify_clause = function
     else
       h::simplify_clause t;;
 
-let rec subsumes_unify g p q = match p, q with
-  | Var x, t -> (match g.graph.(x).n with
-      | Nil -> g.graph.(x).n <- T t; g.vars <- x::g.vars; true
-      | T u when t = u -> true
+let rec subsumes_unify g vars p q = match p, q with
+  | Var x, t -> (match g.(x).n with
+      | Nil -> g.(x).n <- T t; vars := x::!vars; true
+      | T u -> t = u
       | _ -> false)
   | Fn (f, r), Fn (h, s) when f = h && List.length r = List.length s ->
-    List.for_all2 (subsumes_unify g) r s
+    List.for_all2 (subsumes_unify g vars) r s
   | _ -> false;;
 
-let subsumes_atom g p q =
-  subsumes_unify g (term_of_atom p) (term_of_atom q);;
+let subsumes_atom g vars p q =
+  subsumes_unify g vars (term_of_atom p) (term_of_atom q);;
 
-let subsumes_literal g p q = match p, q with
-  | L p, L q | NL p, NL q -> subsumes_atom g p q
+let subsumes_literal g vars p q = match p, q with
+  | L p, L q | NL p, NL q -> subsumes_atom g vars p q
   | _ -> false;;
 
 let rec subsumes g cp cq = match cp with
   | [] -> true
   | p::tp -> List.exists (fun q ->
-      g.vars <- [];
-      let b = subsumes_literal g p q && subsumes g tp cq in
-      List.iter (fun x -> g.graph.(x).n <- Nil) g.vars; g.vars <- []; b) cq;;
-
-let pure_clause g cp s =
-  let rec aux = function
-    | [] -> false
-    | h::t -> List.for_all (fun q -> not (subsumes g [negate_literal h] q)) s || aux t in
-  aux cp;;
+      let vars = ref [] in
+      let b = subsumes_literal g vars p q && subsumes g tp cq in
+      List.iter (fun x -> g.(x).n <- Nil) !vars; b) cq;;
 
 let rec tautology = function
   | [] -> false
   | h::t -> List.mem (negate_literal h) t || tautology t;;
-
-let remove_subsumed g v = List.filter (fun p -> not (subsumes g v p));;
 
 let rec replace g v = function
   | [] -> [v]
@@ -692,10 +679,6 @@ let insert g u t w =
      List.exists (fun p -> subsumes g p w) t ||
      List.exists (fun p -> subsumes g p w) u then t
   else replace g w t;;
-
-let rec insert_null g u t w = match t with
-  | [] -> [w]
-  | h::t -> h::insert g u t w;;
 
 let rec resolve g acc u h = function
   | [] -> let h = simplify_clause h in
@@ -714,7 +697,7 @@ let rec resolve g acc u h = function
         let u2 = substitute_literal s u in
         List.iter (fun x -> g.graph.(x) <- graph_default x) g.vars;
         g.vars <- [];
-        resolve g (resolve g acc u (p::h) t) u2 h2 t2
+        resolve g (resolve g acc u2 h2 t2) u (p::h) t
       end
     else
       resolve g acc u (p::h) t;;
@@ -740,7 +723,7 @@ let rec resolve_binary g acc hp tp hq tq = match tp, tq with
 
 let resolution_step g u v t =
   let w = List.fold_left (fun a b -> resolve_binary g a [] v [] b) [] u in
-  v::u, List.fold_left (insert g (v::u)) t w;;
+  v::u, List.fold_left (insert g.graph (v::u)) t w;;
 
 let resolution g v =
   let u = ref [] and v = ref v in
@@ -758,12 +741,10 @@ let resolution g v =
 let preprocess g u =
   List.fold_left (insert g []) [] (List.map simplify_clause u);;
 
-let preprocess_null g u = u;;
-
 let to_resolution s =
   let f = to_cnf s in
   let n = List.fold_left (fun a b ->
       max ((max_variable_clause b) + (non_variable_count_clause b)) a) 0 f in
   let g = global_make (4 * (n + 1)) in
-  let u = preprocess g f in
+  let u = preprocess g.graph f in
   resolution g u;;
