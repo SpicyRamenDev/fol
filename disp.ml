@@ -41,23 +41,31 @@ let rec print = function
   | Exists (v, f) -> print_string ("EXISTS V" ^ (string_of_int v) ^ ".");
     print f
 
-let rec tree_of_term = function
-  | Var v -> Tree ("V" ^ (string_of_int v), [])
-  | Fn (f, l) -> Tree (f, List.map tree_of_term l)
+let rec tree_of_term b = function
+  | Var v -> Tree ((if b then Printf.sprintf "$v_%d$" v
+                    else Printf.sprintf "V%d" v), [])
+  | Fn (f, l) -> Tree ((if b then Printf.sprintf "$%s$"
+                            (Str.global_replace (Str.regexp "#") "_"
+                            (Str.global_replace (Str.regexp "_") "\_" f))
+                        else f), List.map (tree_of_term b) l)
 
-let tree_of_atom p = tree_of_term (term_of_atom p)
+let tree_of_atom b p = tree_of_term b (term_of_atom p)
 
-let rec tree_of_fol = function
-  | False -> Tree ("false", [])
-  | True -> Tree ("true", [])
-  | Atom a -> tree_of_atom a
-  | Not f -> Tree ("not", [tree_of_fol f])
-  | And (f, g) -> Tree ("and", [tree_of_fol f; tree_of_fol g])
-  | Or (f, g) -> Tree ("or", [tree_of_fol f; tree_of_fol g])
-  | Imp (f, g) -> Tree ("imp", [tree_of_fol f; tree_of_fol g])
-  | Iff (f, g) -> Tree ("iff", [tree_of_fol f; tree_of_fol g])
-  | Forall (v, f) -> Tree ("forall V" ^ (string_of_int v), [tree_of_fol f])
-  | Exists (v, f) -> Tree ("exists V" ^ (string_of_int v), [tree_of_fol f])
+let rec tree_of_fol b = function
+  | False -> Tree ((if b then "$\\bot$" else "false"), [])
+  | True -> Tree ((if b then "$\\top$" else "true"), [])
+  | Atom a -> tree_of_atom b a
+  | Not f -> Tree ((if b then "$\\neg$" else "not"), [tree_of_fol b f])
+  | And (f, g) -> Tree ((if b then "$\\wedge$" else "and"), [tree_of_fol b f; tree_of_fol b g])
+  | Or (f, g) -> Tree ((if b then "$\\vee$" else "or"), [tree_of_fol b f; tree_of_fol b g])
+  | Imp (f, g) -> Tree ((if b then "$\\Rightarrow$" else "imp"),
+                        [tree_of_fol b f; tree_of_fol b g])
+  | Iff (f, g) -> Tree ((if b then "$\\Leftrightarrow$" else "iff"),
+                        [tree_of_fol b f; tree_of_fol b g])
+  | Forall (v, f) -> Tree ((if b then Printf.sprintf "$\\forall v_%d$" v
+                            else Printf.sprintf "forall V%d" v), [tree_of_fol b f])
+  | Exists (v, f) -> Tree ((if b then Printf.sprintf "$\\exists v_%d$" v
+                            else Printf.sprintf "exists V%d" v), [tree_of_fol b f])
 
 let rec tree_height (Tree (_, l)) = List.fold_left (fun a b -> max a (tree_height b)) (-1) l + 1
 
@@ -94,7 +102,7 @@ let layout_compact t =
 
 let disp_layout s h o f =
   open_graph " 1600x720";
-  let t = tree_of_fol f in
+  let t = tree_of_fol false f in
   let n = tree_height t in
   let rec aux x0 m = function
     | Tree_l (v,t,x) ->
@@ -105,6 +113,22 @@ let disp_layout s h o f =
         lineto (int_of_float (s*.x0)) (h*(3*(m+1)));
       List.iter (aux (x0+.x) (m-1)) t in
   aux o n (layout_compact t)
+
+let save file string =
+  let channel = open_out file in
+  output_string channel string;
+  close_out channel;;
+
+let latex_of_fol f name =
+  let rec aux b (Tree_l (n, l, x)) =
+    let s = Printf.sprintf "\\begin{scope}[shift={({%f*\\treel},{-\\treehh})}]\n\
+                            \\node [above] at (0,0) {%s};\n" x n ^
+        (List.fold_right (fun a b -> aux true a ^ b) l "\\end{scope}\n") in
+    if b then Printf.sprintf "\\draw (0,0) -- ({%f*\\treel},{-\\treeh});\n" x ^ s else s in
+  let s = "\\begin{tikzpicture}\n\\begin{scope}[scale={\\trees}]\n" ^
+          (aux false (layout_compact (tree_of_fol true f))) ^
+          "\\end{scope}\n\\end{tikzpicture}\n" in
+  save (Printf.sprintf "tree_%s.tex" name) s;;
 
 let print_hashtbl = Hashtbl.iter (fun x y -> print_string ("V" ^ (string_of_int x) ^ " -> ");
                                    print_term y;

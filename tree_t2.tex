@@ -1,0 +1,39 @@
+\begin{tikzpicture}
+  \begin{scope}[scale={\trees}]
+    \begin{scope}[shift={({0.750000*\treel},{-\treehh})}]
+      \node [above] at (0,0) {$p$};
+      \draw (0,0) -- ({0.000000*\treel},{-\treeh});
+      \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+        \node [above] at (0,0) {$f$};
+        \draw (0,0) -- ({-0.750000*\treel},{-\treeh});
+        \begin{scope}[shift={({-0.750000*\treel},{-\treehh})}]
+          \node [above] at (0,0) {$f$};
+          \draw (0,0) -- ({0.000000*\treel},{-\treeh});
+          \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$b$};
+          \end{scope}
+        \end{scope}
+        \draw (0,0) -- ({0.750000*\treel},{-\treeh});
+        \begin{scope}[shift={({0.750000*\treel},{-\treehh})}]
+          \node [above] at (0,0) {$g$};
+          \draw (0,0) -- ({-0.500000*\treel},{-\treeh});
+          \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$h$};
+            \draw (0,0) -- ({-0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$c$};
+            \end{scope}
+            \draw (0,0) -- ({0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$v_2$};
+            \end{scope}
+          \end{scope}
+          \draw (0,0) -- ({0.500000*\treel},{-\treeh});
+          \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$v_2$};
+          \end{scope}
+        \end{scope}
+      \end{scope}
+    \end{scope}
+  \end{scope}
+\end{tikzpicture}

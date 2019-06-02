@@ -13,11 +13,14 @@ val nf : fol -> fol
 val nnf : bool -> fol -> fol
 val substitute_term : (int -> term) -> term -> term
 val substitute_atom : (int -> term) -> atom -> atom
+val substitute_fol : (int -> term) -> fol -> fol
 val substitute_literal : (int -> term) -> literal -> literal
 val substitute_clause : (int -> term) -> clause -> clause
+val max_variable_fol : fol -> int
 val max_variable_clause : clause -> int
 val non_variable_count_clause : clause -> int
 val rename : fol -> fol
+val prenex : fol -> fol
 val skolemization : fol -> fol
 val rem_quantifiers : fol -> fol
 val distribute : fol -> fol

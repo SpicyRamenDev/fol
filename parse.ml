@@ -46,7 +46,7 @@ let rec parse_fol h vars = function
   | _ -> failwith "parse : empty";;
 
 let to_string = function
-  | Delim a | Str.Text a -> a;;
+  | Str.Delim a | Str.Text a -> a;;
 
 let parse_string s =
   let p = List.map to_string (Str.full_split (Str.regexp "[ \n\t,()~^.]") s) in

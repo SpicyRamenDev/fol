@@ -1,0 +1,16 @@
+Unification du système $\{(f(v_0,g(v_1,a)),f(f(b),g(h(c,v_2),v_2))\}$, dont un unificateur principal est $[v_0\rightarrow f(b),v_1\rightarrow h(c,a),v_2\rightarrow a]$.\\
+
+\begin{lstlisting}
+# let t1 = Fn ("f", [Var 0; Fn ("g", [Var 1; Fn ("a", [])])]);;
+# let t2 = Fn ("f", [Fn ("f", [Fn ("b", [])]); Fn ("g", [Fn ("h", [Fn ("c", []); Var 2]); Var 2])]);;
+# let g = global_make 16;;
+# unify_terms g t1 t2;;
+- : bool = true
+# g;;
+- : Base.global =
+{graph =
+  [|{n = T (Fn ("f", [Fn ("b", [])])); p = 0; r = -2};
+    {n = T (Fn ("h", [Fn ("c", []); Fn ("a", [])])); p = 1; r = -2};
+    {n = T (Fn ("a", [])); p = 2; r = -2}; ... \];
+ max = -1; vars = [2; 1; 0]}
+\end{lstlisting}

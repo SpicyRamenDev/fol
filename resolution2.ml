@@ -285,11 +285,7 @@ let rec resolve_binary g acc hp tp hq tq = match tp, tq with
       resolve_binary g acc hp (p::tp) (q::hq) tq
 
 let resolution_step g u v t =
-  let p = List.for_all is_literal_positive v in
-  let w = List.fold_left (fun a b ->
-      if p || List.for_all is_literal_positive b
-      then resolve_binary g a [] v [] b
-      else a) [] u in
+  let w = List.fold_left (fun a b -> resolve_binary g a [] v [] b) [] u in
   v::u, List.fold_left (insert g.graph (v::u)) t w
 
 let resolution g =
@@ -312,5 +308,4 @@ let resolution_process f =
       max ((max_variable_clause b) + (non_variable_count_clause b)) a) 0 f in
   let g = global_make (4 * (n + 1)) in
   let u = preprocess g.graph f in
-  let a, b = resolution g u in
-  List.mem [] a, (a, b)
+  resolution g u

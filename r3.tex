@@ -1,0 +1,514 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{stmaryrd}
+\usepackage{courier}
+\usepackage{graphicx}
+\usepackage{mathabx}
+\usepackage{tikz}
+\usepackage{pgffor}
+\usepackage{pdfpages}
+\usepackage{listings}
+\usepackage{array}
+\usepackage[a4paper, margin=2cm]{geometry}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{bussproofs}
+\usepackage{latexsym}
+
+\def\fCenter{{\mbox{\Large$\rightarrow$}}}
+
+\hypersetup{
+    colorlinks=true,
+    linktoc=all,
+    linkcolor=black,
+}
+
+\lstset{basicstyle=\small\ttfamily,breaklines=true}
+
+\title{Démonstration automatique de théorèmes}
+\author{Nicolas Daire}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+  Dans ce TIPE on cherche à mettre au point un algorithme de démonstration automatique de théorèmes en logique du premier ordre.
+
+  On montre dans un premier des résultats théoriques permettant de comprendre les enjeux et les limites d'un tel algorithme.
+
+  On aborde ensuite l'implémentation de l'algorithme en utilisant la méthode de résolution.
+\end{abstract}
+
+%\tableofcontents
+
+\theoremstyle{definition}
+\newtheorem{definition}{Définition}[section]
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Théorème}[section]
+
+\theoremstyle{plain}
+\newtheorem{corollary}{Corollaire}[theorem]
+
+\theoremstyle{plain}
+\newtheorem{lemma}[theorem]{Lemme}
+
+\theoremstyle{remark}
+\newtheorem*{remark}{Remarque}
+
+\section{Syntaxe}
+
+\subsection{Langage}
+
+\begin{definition}
+  Un langage $L$ est un ensemble de symboles constitué :
+  \begin{itemize}
+  \item des parenthèses $(\ )$, des connecteurs $\neg\ \wedge\ \vee\ \Rightarrow\ \Leftrightarrow$, et des quantificateurs $\forall\ \exists$
+  \item d'un ensemble $\mathfrak{V} = \{v_n\}$ infini dénombrable de variables
+  \item d'un ensemble $\mathfrak{C}$ de symboles de constantes
+  \item d'une réunion d'ensembles $\mathfrak{F}_n\ (n \in \mathbb{N})$ de symboles de fonctions $n$-aires, où $\mathfrak{F}_0 = \mathfrak{C}$
+  \item d'une réunion d'ensembles $\mathfrak{R}_n\ (n \in \mathbb{N})$ de symboles de relations $n$-aires, où $\mathfrak{R}_0$ est l'ensemble des propositions atomiques qui contient parfois $\{\top,\bot\}$
+  \end{itemize}
+\end{definition}
+
+\subsection{Formules}
+
+\begin{definition}
+  On définit les termes, atomes et formules par induction structurelle :
+  \begin{itemize}
+  \item L'ensemble $\mathfrak{T}(L)$ des termes est le plus petit ensemble qui contient $\mathfrak{V}$ et qui est stable par $(t_1,\dots,t_n) \mapsto f(t_1,\dots,t_n)$ pour tout $f \in \mathfrak{F}_n$
+  \item L'ensemble $\mathfrak{A}(L)$ des atomes est l'ensemble des $R(t_1,\dots,t_n)$ où $R \in \mathfrak{R}_n$ et $(t_1,\dots,t_n) \in \mathfrak{T}(L)^n$
+  \item L'ensemble $\mathfrak{F}(L)$ des formules du premier ordre est le plus petit ensemble qui contient $\mathfrak{A}(L)$, et $\neg A,\ A\wedge B,\ A\vee B,\ A\Rightarrow B,\ A\Leftrightarrow B,\ \forall v_n\ A,\ \exists v_n\ A$ lorsqu'il contient $A$ et $B$
+  \end{itemize}
+\end{definition}
+
+\begin{definition}
+  Les occurences d'une variable $v$ dans une formule $F$ peuvent être liées ou libres :
+  \begin{itemize}
+  \item Si $F = \neg G,\ G\gamma H\ (\gamma\ connecteur),\ \forall w\ G,\ \exists w\ G\ (w \neq v)$ alors les occurences libres dans $F$ sont les occurences libres dans $G$ et $H$
+  \item Si $F = \forall v\ G,\ \exists v\ G$ alors aucunes des occurences n'est liée
+  \end{itemize}
+
+  Les occurences non libres de $v$ sont dites liées.
+
+  Une formule où aucune variable n'a d'occurence libre est dite close.
+
+  On écrit $F[v_1,\dots,v_n]$ pour dire que les variables ayant une occurences libres sont parmi les $v_i$
+
+  La clôture universelle de $F[v_1,\dots,v_n]$ est la formule close $\forall v_1\dots\forall v_n\ F$
+\end{definition}
+
+\begin{definition}
+  On définit les substitutions dans les termes et les formules :
+  \begin{itemize}
+  \item Si $t$ est un terme, on note $t_{u_1/v_1,\dots,u_n/v_n}$ le terme où on a remplacé les occurences de $v_i$ par le terme $u_i$
+  \item Si $F$ est une formule, on note $F_{u_1/v_1,\dots,u_n/v_n}$ la formule où on a remplacé les occurences libres de $v_i$ par le terme $u_i$.
+  \end{itemize}
+
+  On pourra noter noter $[v_1\rightarrow u_1,\dots,v_n\rightarrow u_n]$ voire $[u_1,\dots,u_n]$ s'il n'y a pas ambiguïté.
+\end{definition}
+
+\subsection{Implémentation}
+
+On définit les types récursifs OCaml \texttt{term,\ atom,\ fol} pour représenter les termes, atomes et formules. On passe d'une chaîne de caractères représentant une formule (avec la notation polonaise ou infix) à la structure OCaml avec les fonctions du module \texttt{parse}. On peut ensuite afficher les formules sous forme de chaîne de caractères ou d'arbre avec les fonctions du module \texttt{disp}.
+
+\section{Sémantique}
+
+\subsection{Structures et modèles}
+
+\begin{definition}
+  Une $L$-structure $\mathfrak{M}$ est constituée :
+  \begin{itemize}
+  \item d'un ensemble de base $M$
+  \item d'éléments $\overline{c}^{\mathfrak{M}}$ interprétant les symboles de constantes $c \in \mathfrak{C}$
+  \item de fonctions $\overline{f}^{\mathfrak{M}} : M^k \rightarrow M$ interprétant les symboles de fonctions $f \in \mathfrak{F}$
+  \item de sous-ensembles $\overline{R}^{\mathfrak{M}} \subseteq M^k$ interprétant les symboles de relations $R \in \mathfrak{R}$
+  \end{itemize}
+\end{definition}
+
+\subsection{Satisfiabilité}
+
+\begin{definition}
+  Un environnement $e$ est une fonction $\mathfrak{V} \rightarrow M$.
+
+  La valeur d'un terme $t$ dans un environnement $e$ est défini par induction :
+  \begin{itemize}
+  \item $V(c) = \overline{c}$
+  \item $V(v) = e(v)$
+  \item $V(f(v_1,\dots,v_n) = f(V(v_1,\dots,V(v_n))$
+  \end{itemize}
+
+  La valeur d'une formule $F$ dans un environnement $e$ est une fonction à valeurs dans $\{0,1\}$ définie par induction avec le sens courant que l'on donne aux symboles.
+\end{definition}
+
+\begin{definition}
+  On dit que $\mathfrak{M}$ satisfait $F$ dans l'environnement $e$, noté $\mathfrak{M},e \models F$, lorsque $V_{\mathfrak{M}}(F,e) = 1$.
+
+  On dit que $\mathfrak{M}$ satisfait $F$, ou $\mathfrak{M}$ est un modèle de $F$, noté $\mathfrak{M} \models F$, lorsque $\mathfrak{M}$ satisfait $F$ dans tout environnement $e$, où de manière équivalente que $\mathfrak{M}$ satisfait la clôture universelle de $F$.
+\end{definition}
+
+\begin{definition}\mbox{}
+  \begin{itemize}
+  \item Une formule close $F$ est universellement valide, noté $\models F$, si elle est satisfaite dans toute $L$-structure.\\
+    Si $\models\neg F$, on dit que $F$ est contradictoire.
+  \item Deux formules $F$ et $G$ sont universellement équivalentes, noté $F \sim G$, si $\models F \Leftrightarrow G$.
+  \item Une théorie est un ensemble de formules closes, souvent appelées axiomes.
+  \item Une $L$-structure $\mathfrak{M}$ satisfait la théorie $T$, ou est un modèle de $T$, noté $\mathfrak{M} \models T$, lorsque $\mathfrak{M}$ satisfait toutes les formules de $T$.
+  \item Une théorie $T$ est consistente si elle admet un modèle, sinon elle est contradictoire.
+  \item Une formule close $F$ est conséquence sémantique de $T$ si $\mathfrak{M} \models F$ pour tout modèle $\mathfrak{M}$ de $T$.
+  \item Deux théories $T_1$ et $T_2$ sont équivalentes lorsque $\forall F \in T_1, T_2 \models F$ et inversement.
+  \end{itemize}
+\end{definition}
+
+\subsection{Compacité}
+
+On parle de logique propositionnelle lorsque $L$ se réduit aux parenthèses, aux connecteurs et à $\mathfrak{P} = \mathfrak{R}_0$. On identifie alors une interprétation à une fonction $\delta$ de $\{0,1\}^{\mathfrak{P}}$ appelée distribution de valeurs de vérité, et la valeur de l'interprétation à la fonction $\overline{\delta}$ de $\{0,1\}^{\mathfrak{F}}$ qui coïncide avec $\delta$ sur $\mathfrak{P}$.
+
+\begin{theorem}[Tychonov]
+  L'espace topologique produit d'une famille d'espaces compacts est compact.
+\end{theorem}
+
+\begin{theorem}[Compacité du calcul propositionnel]
+  Un ensemble $T$ de formules du calcul propositionnel est satisfiable si et seulement si $T$ est finiment satisfiable.
+\end{theorem}
+
+\begin{proof}
+  Montrons la contraposée du sens réciproque.\\
+  Si $F \in T$, note $\Delta(F) = \{\delta \in \{0,1\}^{\mathfrak{P}}\ |\ \overline{\delta} (F) = 1\}$. $T$ n'est pas satisfiable si et seulement si $\bigcap_{F \in T}\Delta(F) = \varnothing$. On munit $\{0,1\}$ de la topologie discrète dans laquelle tous les sous-ensembles sont des ouverts-fermés. Les formules de $F \in T$ sont finies donc ne dépendent que d'un nombre fini de variables propositionnelles donc $\Delta(F) = \bigcup_{\epsilon \in E}\{\delta \in \{0,1\}^{\mathfrak{P}}\ |\ \delta\restriction_I = \epsilon \}$ avec $I \subseteq \mathfrak{P}$ fini et $E \subseteq \{0,1\}^I$, donc les $\Delta(F)$ sont des fermés de $\{0,1\}^{\mathfrak{P}}$ comme unions finies d'ouverts-fermés. D'après le théorème de Tychonov l'espace produit $\{0,1\}^{\mathfrak{P}}$ est compact donc il existe une partie finie $S \subseteq T$ telle que $\bigcap_{F \in S}\Delta(F) = \varnothing$, $T$ n'est donc pas finiment satisfiable.
+\end{proof}
+
+\begin{theorem}[Compacité du calcul des prédicats]
+  Une théorie $T$ dans un langage du premier ordre est consistente si et seulement si $T$ est finiment consistente.
+\end{theorem}
+
+\begin{lemma}
+  Soient $A_1,\dots,A_n$ des variables propositionnelles, $J[A_1,\dots,A_n]$ une formule propositionnelle, et $F_1,\dots,F_n$ des formules du premier ordre.
+  Si $J$ est une tautologie, alors $\models J[F_1,\dots,F_n]$.
+\end{lemma}
+
+\begin{lemma}
+  Si $G$ est une sous-formule de $F$, et $G \sim G'$, alors $F \sim F'$ obtenue à partir de $F$ en remplaçant une occurence de $G$ par $G'$.
+\end{lemma}
+
+\begin{theorem}
+  Toute formule du premier ordre est universellement équivalente à une formule n'utilisant que les symboles de connecteur d'un système complet ainsi que l'un des symboles de quantification $\forall$ et $\exists$.
+\end{theorem}
+
+Une formule est sous forme prénexe si elle s'écrit $Q_1v_1\dots Q_nv_n\, F$ où $Q_1,\dots,Q_n$ sont des quantificateurs, $v_1,\dots,v_n$ sont des variables et $F$ est une formule sans quantificateur. On appelle alors $Q_1v_1\dots Q_nv_n$ son préfixe.\\
+Une formule sous forme prénexe est polie si les variables quantifiées sont deux à deux distinctes.\\
+Une formule est universelle (resp. existentielle) si elle ne contient pas de quantificateur existentiel (resp. universel).
+
+\begin{theorem}
+  Toute formule du premier ordre est universellement équivalente à une formule sous forme prénexe polie.
+\end{theorem}
+
+\begin{proof}
+  On en donne une preuve constructive par induction.
+  \begin{itemize}
+  \item Si $F = \neg F'$, par récurrence $F' \sim Q_1v_1\dots Q_nv_n\ F''$ où $F''$ est sans quantificateur, il suffit de prendre $\overline{Q_1}v_1\dots\overline{Q_n}v_n\ \neg F''$.
+  \item Si $F = F' \vee G'$, par récurrence $F' \sim Q_1v_1\dots Q_mv_m\ F''$ et $G' \sim Q_{m+1}v_{m+1}\dots Q_{m+n}v_{m+n}\ G''$ où $F''$ et $G''$ sont sans quantificateurs, soient $w_1,\dots,w_{m+n}$ des variables n'ayant aucune occurence dans $F''$ et $G''$, il suffit de prendre $Q_1w_1\dots Q_{m+n}w_{m+n}\ F''_{w_1/v_1,\dots,w_m/v_m} \vee G''_{w_{m+1}/v_{m+1},\dots,w_{m+n}/v_{m+n}}$.
+  \item Si $F = \exists v\ F'$, par récurrence $F' \sim Q_1v_1\dots Q_nv_n\ F''$ où $F''$ est sans quantificateur. Si $v \not\in \{v_1,\dots,v_n$, il suffit de prendre $\exists v Q_1v_1\dots Q_nv_n\ F''$, sinon il suffit de prendre $Q_1v_1\dots Q_nv_n\ F''$.
+  \end{itemize}
+\end{proof}
+
+\begin{remark}
+  En utilisant les équivalences $\forall v F \wedge \forall v G \sim \forall v (F \wedge G)$ et $\exists v F \vee \exists v G \sim \exists v (F \vee G)$ et en renommant les variables, on peut obtenir une forme prénexe polie utilisant moins de variables.
+\end{remark}
+
+Soit $F$ une formule du premier ordre, $Q_1v_1\dots Q_nv_n\ G$ où $G$ est sans quantificateur une forme prénexe polie équivalente.
+
+Pour $i\in\llbracket 1,n\rrbracket$ tel que $Q_i=\exists$, soient $j_1,\dots,j_k$ les indices inférieurs à $i$ des variables quantifiées universellement, on introduit un nouveau symbole de fonction $k$-aire $f_S^i$ appelée fonction de Skolem et un terme $t_S^i = f_S^i (v_{j_1},\dots,v_{j_k})$. On note $L_S$ l'extension de $L$ enrichie des symboles de fonction de Skolem.
+
+Soient $i_1,\dots,i_k$ les indices des variables quantifiées existentiellement, $j_1,\dots,j_{k'}$ les indices des variables quantifiées universellement, on appelle forme de Skolem la formule $F_S = Q_{j_1}v_{j_1}\dots Q_{j_{k'}}v_{j_{k'}}\ G_{t_S^{i_1}/v_{i_1},\dots,t_S^{i_k}/v_{i_k}}$ du langage $L_s$.
+
+\begin{theorem}
+  Soit $F$ une formule du premier ordre. $F$ et sa forme de Skolem $F_S$ sont équisatisfiables.
+\end{theorem}
+
+\begin{proof}
+  Si $F$ admet un modèle $\mathfrak{M}$, on peut construire une extension $\mathfrak{N}$ sur le langage $L_S$ qui soit un modèle de $F_S$ en interprétant les fonctions de Skolem $f_s$ par des fonctions de choix obtenues avec l'axiome du choix par récurrence sur le nombre de quantificateurs existentiels.
+
+  Si $F_S$ admet un modèle $\mathfrak{N}$, $F$ est satisfaite dans la restriction $\mathfrak{M}$ de $\mathfrak{N}$ privée des symboles de fonction de Skolem.
+\end{proof}
+
+\section{Démonstration}
+
+\subsection{Séquents}
+
+Pour formaliser les démonstrations en calcul des prédicats on se munit d'un ensemble de règles de démonstration :
+
+Deux règles de déduction :
+
+\begin{itemize}
+\item Le modus ponens :
+\AxiomC{$F,\ F \Rightarrow G$}
+\UnaryInfC{$G$}
+\DisplayProof
+\item La règle de généralisation :
+\AxiomC{$F$}
+\UnaryInfC{$\forall v\ F$}
+\DisplayProof
+\end{itemize}
+
+Des axiomes logiques :
+
+\begin{itemize}
+\item Les tautologies
+\item Les axiomes de quantificateurs :
+  \begin{itemize}
+  \item $\exists v\ F \Leftrightarrow \neg\forall v\ \neg F$
+  \item $\forall v\ (F \Rightarrow G) \Rightarrow (F \Rightarrow \forall v\ G)$ si $v$ n'a pas d'occurence dans $F$
+  \item $\forall v\ F \Rightarrow F_{t/v}$ si les occurences libres de $v$ ne sont pas dans le champ d'un quantificateur liant une variable de $t$
+  \end{itemize}
+\end{itemize}
+
+\begin{definition}
+  Soit $T$ une théorie et $F$ une formule close. On appelle démonstration de $F$ dans $T$ une suite $\mathfrak{D} = (F_0,\dots,F_n)$ avec $F_n = F$ vérifiant pour tout $i$ une des conditions suivantes :
+  \begin{itemize}
+  \item $F_i \in T$
+  \item $F_i$ est un axiome logique
+  \item $F_i$ se déduit à partir de formules parmi $F_0,\dots,F_{i-1}$ et d'une règle de déduction
+  \end{itemize}
+  S'il existe un démonstration de $F$ dans $T$ on dit que $F$ est conséquence syntaxique de $T$, ou que $T$ démontre $F$, noté $T \vdash F$.
+\end{definition}
+
+\begin{definition}\mbox{}
+  \begin{itemize}
+  \item $T$ est cohérente si on n'a jamais $T\vdash F$ et $T\vdash\neg F$, ou de manière équivalente $T\not\vdash\bot$, ou encore il existe une formule $F$ telle que $T\not\vdash F$.
+  \item $T$ est complète si $T$ est cohérente et pour toute formule close $F$, $T\vdash F$ ou $T\vdash\neg F$.
+  \end{itemize}
+\end{definition}
+
+\begin{theorem}
+  Soit $F$ une formule close. Si $T,F\vdash G$, alors $T\vdash F\Rightarrow G$.
+\end{theorem}
+
+\begin{proof}
+  Si $(G_0,\dots,G_n)$ est une démonstration de $G$ dans $T\cup\{F\}$, on peut déduire une démonstration de $F\Rightarrow G$ dans $T$ en ajoutant des étapes dans la suite $(F\Rightarrow G_0,\dots,F\Rightarrow G_n)$.
+\end{proof}
+
+\begin{corollary}
+  $T\vdash F$ si et seulement si $T\cup\{\neg F\}$ est incohérente.
+\end{corollary}
+
+\begin{proof}
+  Si $T\cup \{\neg F\}$ est incohérente, en particulier $T,\neg F\vdash F$ donc $T\vdash\neg F\Rightarrow F$, et $(\neg F\Rightarrow F)\Rightarrow F$ est une tautologie, donc par modus ponens $T\vdash F$.
+\end{proof}
+
+\begin{definition}
+  Une preuve par réfutation de $F$ dans $T$ est la démonstration $T,F\vdash\bot$.
+\end{definition}
+
+\begin{theorem}
+  Si $T \vdash F$, alors $T \models F'$ où $F'$ est une clôture universelle de $F$.
+\end{theorem}
+
+\begin{corollary}
+  Si $T$ est consistante, alors $T$ est cohérente.
+\end{corollary}
+
+\begin{theorem}
+  Si $T$ est cohérente, alors $T$ est consistante.
+\end{theorem}
+
+\begin{proof}
+  On construit une théorie $Th\supseteq T$ sur $L'\supseteq L$ qui vérifie :
+  \begin{itemize}
+  \item $Th$ est complète
+  \item Si $F[v]$ est une formule de $L'$ ayant $v$ comme seule variable libre, alors il existe $c_F\in \mathfrak{C}(L')$ tel que $Th\vdash\exists y\ F[y]\Rightarrow F[c_F]$
+  \end{itemize}
+  Puis on construit un modèle de $Th$ qui donnera un modèle de $T$.
+\end{proof}
+
+\begin{theorem}[Complétude du calcul des prédicats]
+  Soient $T$ une théorie et $F$ une formule close, $T\vdash F$ si et seulement si $T\models F$.
+\end{theorem}
+
+\begin{proof}\mbox{}\\
+  $T\vdash F$\\
+  ssi $T\cup\{\neg F\}$ est incohérente\\
+  ssi $T\cup\{\neg F\}$ est inconsistante\\
+  ssi aucun modèle ne satisfait $\neg F$
+  ssi tout modèle satisfait $F$
+  ssi $T\models F$
+\end{proof}
+
+\begin{proof}(Théorème de compacité du calcul des prédicats)
+  Si $T$ est inconsistante, alors $T$ est incohérente, $T\vdash\bot$ donc il existe un sous-ensemble fini de formules $T'\subseteq T$ tel que $T'\vdash\bot$. Par le théorème de complétude $T'\models\bot$ donc $T'$ est inconsistante.
+\end{proof}
+
+\subsection{Conversion}
+
+\begin{definition}\mbox{}\\
+  \begin{itemize}
+  \item Un littéral $L$ est un atome $A$ ou sa négation $\neg A$.
+  \item Une clause est une disjonction de littéraux $L_1\vee\dots\vee L_n$. On peut aussi écrire $A_1\wedge\dots\wedge A_m\Rightarrow B_1\vee\dots\vee B_n$ où $A1_,\dots,A_m,B_1,\dots,B_n$ sont des atomes, auquel cas on appelle $A_1\wedge\dots\wedge A_m$ la prémisse et $B_1\vee\dots\vee B_n$ la conclusion de la clause.
+  \item Une formule du premier ordre sous forme normale clausale est une conjonction de clauses $\bigwedge_i\bigvee_j L_{ij}$.
+\end{itemize}
+\end{definition}
+
+\begin{theorem}
+  Toute formule $F$ admet une forme normale clausale équisatisfiable.
+\end{theorem}
+
+\begin{proof}
+  Il suffit pour cela de calculer la forme de Skolem $F_S$ de $F$, puis d'éliminer les quantificateurs universels de $F_s$, enfin de mettre $F_s$ sous forme normale conjonctive et de rassembler les sous-formules en clauses.
+\end{proof}
+
+On introduit alors les types OCaml \texttt{literal, clause, cnf} pour représenter les formules sous forme clausale comme \texttt{list list literal}.
+
+\subsection{Démonstration par coupure}
+
+On introduit une procédure de décision du calcul propositionnel par réfutation. On cherche une démonstration de la clause vide à partir d'un ensemble de formules sous forme clausale au moyen de deux règles.
+
+\begin{itemize}
+\item La règle de simplification :
+  \AxiomC{$A\vee A\vee B_1\vee\dots\vee B_n$}
+  \UnaryInfC{$B_1\vee\dots\vee B_n$}
+  \DisplayProof
+  où $A,B_1,\dots,B_n$ sont des littéraux.
+\item La règle de coupure qui généralise le modus ponens :
+  \AxiomC{$A\vee B_1\vee\dots\vee B_m,\ \neg A\vee C_1\vee\dots\vee C_n$}
+  \UnaryInfC{$B_1\vee\dots B_m\vee C_1\vee\dots\vee C_n$}
+  \DisplayProof
+  où $A,B_1,\dots,B_m,C_1,\dots,C_n$ sont des littéraux.
+\end{itemize}
+
+On peut combiner les deux règles :
+\AxiomC{$A\vee\dots\vee A\vee B_1\vee\dots\vee B_m,\ \neg A\vee\dots\vee\neg A\vee C_1\vee\dots\vee C_n$}
+\UnaryInfC{$B_1\vee\dots B_m\vee C_1\vee\dots\vee C_n$}
+\DisplayProof
+
+\begin{theorem}[Complétude de la démonstration par coupure]
+  Tout ensemble de clauses insatisfiable est réfutable par coupure.
+\end{theorem}
+
+\begin{proof}
+  Soit $\Gamma$ un ensemble de clauses insatisfiable.
+
+  Par compacité du calcul propositionnel on peut supposer $\Gamma$ fini. On peut de plus supposer que $\Gamma$ ne contient pas de tautologies ni la clause vide, et que toutes ses clauses sont simplifiées. On peut également supposer que toute variable propositionnelle de $\Gamma$ apparaît à la fois positivement et négativement.
+
+  Si $C$ est une clause, on note $C^-$ sa prémisse et $C^+$ sa conclusion.
+
+  On raisonne par récurrence sur le nombre de variables propositionnelles. Soit $A$ une variable propositionnelle apparaissant dans $\Gamma$. On introduit les ensembles :
+  \begin{itemize}
+  \item $\Gamma_0 = \{C\ |\ A\text{ n'a pas d'occurrence dans }C\}$
+  \item $\Gamma^- = \{C\ |\ A\text{ n'a pas d'occurrence dans }C^-\} = \{C_i\}$
+  \item $\Gamma^+ = \{C\ |\ A\text{ n'a pas d'occurrence dans }C^+\} = \{D_j\}$
+  \end{itemize}
+
+  On applique exhaustivement la coupure sur les clauses $C_i$ et $D_j$ pour obtenir les clauses $E_{ij}$. On pose $\Gamma' = \Gamma\cup\{E_{ij}\}$, dans lequel $A$ n'a pas d'ocurrence. Il suffit alors de montrer que l'ensemble $\Gamma'$ est insatisfiable pour conclure par récurrence.
+\end{proof}
+
+Pour déterminer si un ensemble $\Gamma$ est satisfiable, on élimine d'abord les tautologies et on simplifie les clauses, puis on applique exhaustivement la règle de coupure sur tous les couples de clauses. Le nombre de clauses simplifiées est fini donc la procédure termine, il suffit alors de regarder si on a pu dériver la clause vide.
+
+\subsection{Démonstration par résolution}
+
+On va adapter la méthode de démonstration par coupure au calcul des prédicats pour obtenir une procédure de réfutation.
+
+\begin{definition}
+  Soit $S = \{(t_1,u_1),\dots,(t_n,u_n)\}$ un ensemble de couples de termes. On appelle unificateur de $S$ toute substitution $\sigma$ telle que $\sigma(t_i)=\sigma(u_i)$ pour tout $i$.
+
+  On appelle unificateur principal de $S$ tout unificateur $\pi$ tel que si $\sigma$ est un unificateur de $S$ il existe une substitution $\tau$ telle que $\sigma=\tau\circ\pi$.
+\end{definition}
+
+\begin{theorem}
+  Si $S$ admet un unificateur, alors $S$ admet un unificateur principal.
+\end{theorem}
+
+On va donner une preuve constructive sous la forme d'un algorithme qui détermine si un système admet un unificateur, et renvoie un unificateur principal le cas échéant.
+
+On introduit pour cela deux procédures :
+\begin{itemize}
+\item Réduction : si $(f(t_1,\dots,t_n),f(u_1,\dots,u_n)) \in S$, on remplace le couple dans $S$ par les couples $(t_1,u_1),\dots,(t_n,u_n)$.
+\item Elimination : si $(v,t) \in S$ où $v$ est une variable, on applique la substitution $(v\Rightarrow t)$ à chaque membre des autres couples de $S$.
+\end{itemize}
+
+On dit que le $S$ est résolu si $S = \{(v_1,t_1),\dots,(v_n,t_n)\}$ où les $v_i$ sont des variables n'apparaîssant qu'une seule fois dans $S$. La substitution $(v_1\rightarrow t_1,\dots,v_n\rightarrow t_n)$ est alors un unificateur principal.
+
+On exécute les étapes suivantes tant que c'est possible, sinon on termine avec succès.
+\begin{itemize}
+\item Si $(t,v)\in S$ où $v$ est une variable mais pas $t$, on remplace le couple par $(v,t)$.
+\item Si $(v,v)\in S$ où $v$ est une variable, on retire le couple de $S$.
+\item Si $(t,u)\in S$ où $t$ et $u$ ne sont pas des variables, si $t$ et $u$ ne commencent pas par les mêmes symboles de fonction on termine avec échec, sinon on applique la réduction.
+\item Si $(v,t)\in S$ où $v$ est une variable qui a une autre occurrence dans $S$ et $v\neq t$, si $v$ a une occurrence dans $t$ on termine avec échec, sinon on applique l'élimination.
+\end{itemize}
+
+\begin{theorem}
+  L'algorithme décrit termine toujours quelque soit l'ordre des opérations, et renvoie un unificateur principal si et seulement si le système admet un unificateur.
+\end{theorem}
+
+On a ainsi un algorithme pour le problème d'unification, mais il a une complexité temporelle exponentielle.
+
+Pour remédier on représente le problème par des graphes acycliques : on associe un sommet à chaque sous-terme, en réservant un unique sommet pour chaque variable, et $(t,u)$ est une arête si et seulement si $t$ est une fonction qui possède $u$ comme argument.
+
+On maintient une structure Union-Find qui renseigne les classes d'équivalence des variables et des sous-termes substitués par les mêmes termes. Ainsi pendant l'exécution on ne cherche à unifier que les parents, les termes unifiés deviennent donc inaccessibles pendant la recherche. Il suffit ensuite de vérifier que le graphe obtenu est acyclique. Le cas échéant on peut facilement reconstruire l'unificateur principal.
+
+\begin{theorem}
+  Le nouvel algorithme est correct et a une complexité temporelle en $O(mG(n))$ où $m$ et $n$ sont les nombres d'arêtes et de sommets dans les graphes donnés en entrée, et $G$ est la fonction inverse d'Ackermann, qui est inférieure à 5 en pratique. L'algorithme obtenu est ainsi presque linéaire.
+\end{theorem}
+
+Pour la réfutation par résolution on introduit la règle de résolution, l'analogue de la règle de coupure pour la logique du premier ordre, mais au lieu de résoudre sur des atomes identiques on résoud sur des atomes unifiables.
+
+Soient $C$ et $D$ deux clauses. On construit la clause $D'$ en renommant les variables de $D$ de sorte que $C$ et $D'$ n'aient aucune variable en commun. Soient $X\subseteq C^+$ et $Y\subseteq D'^-$ non vides tels que $X\cup Y$ soit unifiable. Alors la règle de résolution s'écrit
+\AxiomC{$C,\ D'$}
+\UnaryInfC{$\pi_{X\cup Y}(C\setminus X,\ D'\setminus Y)$}
+\DisplayProof
+où $\pi$ est un unificateur principal.
+
+\begin{theorem}
+  Si $E$ se déduit de $C,D$, tout modèle de $C,D$ est aussi un modèle de $E$.
+\end{theorem}
+
+\begin{definition}
+  Soi $\Gamma$ un ensemble de clause. On appelle réfutation de $\Gamma$ toute suite de clause $(C_1,\dots,C_n)$ se terminant par la clause vide telle que pour tout $i$, $C_i\in \Gamma$ ou $C_i$ se déduit de deux clauses antérieures de la suite. On dit que $\Gamma$ est réfutable s'il existe une réfutation de $\Gamma$.
+\end{definition}
+
+\begin{theorem}[Complétude de la méthode de résolution]
+  Un ensemble de clauses $\Gamma$ est réfutable si et seulement si $\Gamma$ est inconsistant.
+\end{theorem}
+
+On introduit pour cela la méthode Herbrand qui permet de ramener la logique du premier ordre à la logique propositionnelle.
+
+On cherche un modèle dont l'ensemble de base est $\mathfrak{T}(L)$, et les symboles fonctions ont leur interprétation naturelle. Pour tout $\delta\in\{0,1\}^{\mathfrak{A}(L)}$ on définit une interprétation $\mathfrak{I}_\delta$ dans laquelle si $R$ est un symbole de relation et $t_1,\dots,t_n$ des termes, $(t_1,\dots,t_n)\in R$ si et seulement si $\delta(R(t_1,\dots,t_n))=1$.\\
+
+Ainsi pour savoir si $\Gamma\models F$, on essaie de réfuter $\Gamma,\neg F$.
+On maintient deux listes correspondant aux clauses utilisées et non utilisée, et on défile la liste non utilisées en résolvant chaque clause avec toutes les clauses de la liste utilisées, jusqu'à déduire la clause vide ou vider la liste non utilisées.
+
+Mais cette recherche peut ne jamais terminer, le calcul des prédicats est semi-décidable.
+
+Il existe néanmoins diverses optimisations de la méthode de résolution.
+
+\begin{definition}
+  Une clause $C$ subsume une clause $D$, noté $C\leq D$, s'il existe une substitution $\sigma$ telle que $\sigma(C)\subseteq D$.
+\end{definition}
+
+On peut déterminer si $C\leq D$ à l'aide d'un algorithme de backtracking en construisant la substitution au fur et à mesure.
+
+\begin{theorem}
+  Si $C\leq C'$, alors tout résolvant de $C',D$ est subsumé par $C$ ou un résolvant de $C,D$.
+\end{theorem}
+
+\begin{corollary}
+  Si $\Gamma\vdash C'$, alors il existe une démonstration $\Gamma\vdash C\leq C'$ où aucune clause n'est subsumée par une clause antérieure.
+\end{corollary}
+
+On peut donc ignorer les résolvants subsumés par des clauses antérieures, et remplacer les clauses subsumées par les résolvants dans la liste utilisées.
+
+\begin{theorem}
+  Soit $\mathfrak{M}$ une $L$-structure. Si $\Gamma$ est réfutable, il existe une réfutation qui ne résoud deux clauses que si l'une au moins n'est pas satisfaite dans $\mathfrak{M}$.
+\end{theorem}
+
+Si $\Gamma$ satisfait les deux clauses la contradiction doit venir des autres clauses, donc on peut trouver une telle réfutation.
+
+La résolution positive est un cas particulier où l'on choisit une interprétation dans laquelle toutes les formules atomiques sont fausses, les résolutions font donc toujours intervenir au moins une clause constituée uniquement de littéraux positifs.
+
+\end{document}

@@ -20,4 +20,4 @@ val resolution_step : global -> clause list -> clause -> clause list -> (clause 
 
 val resolution : global -> clause list -> (clause list * clause list)
 
-val resolution_process : fol -> (clause list * clause list)
+val resolution_process : fol -> (bool * (clause list * clause list))

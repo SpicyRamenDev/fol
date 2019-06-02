@@ -1,0 +1,681 @@
+\documentclass[9pt]{beamer}
+\usepackage{beamerthemeshadow}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{stmaryrd}
+\usepackage{courier}
+\usepackage{graphicx}
+\usepackage{mathabx}
+\usepackage{tikz}
+\usepackage{pgffor}
+\usepackage{pdfpages}
+\usepackage{listings}
+\usepackage{array}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{bussproofs}
+\usepackage{latexsym}
+\usepackage{subfig}
+
+\hypersetup{
+  colorlinks=true,
+  linktoc=all,
+  linkcolor=black,
+}
+
+\lstset{
+  language=[Objective]caml,
+  frame=lines,
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny,
+  showstringspaces=false
+}
+
+\title{Démonstration automatique de théorèmes}
+\author{Nicolas Daire}
+\date{}
+
+\setbeamertemplate{caption}[numbered]
+
+\begin{document}
+
+\newcommand{\treel}{.7}
+\newcommand{\treeh}{0.4}
+\newcommand{\treehh}{0.8}
+\newcommand{\trees}{1}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+  \tableofcontents
+\end{frame}
+
+\theoremstyle{remark}
+\newtheorem*{remark}{Remarque}
+
+\section{Syntaxe}
+
+\subsection{Langage}
+
+\begin{frame}
+
+\begin{definition}
+  Un langage $L$ est un ensemble de symboles constitué :
+  \begin{itemize}
+  \item des parenthèses $(\ )$, des connecteurs $\neg\ \wedge\ \vee\ \Rightarrow\ \Leftrightarrow$, et des quantificateurs $\forall\ \exists$
+  \item d'un ensemble $\mathfrak{V} = \{v_n\}$ infini dénombrable de variables
+  \item d'un ensemble $\mathfrak{C}$ de symboles de constantes
+  \item d'une réunion d'ensembles $\mathfrak{F}_n\ (n \in \mathbb{N})$ de symboles de fonctions $n$-aires, où $\mathfrak{F}_0 = \mathfrak{C}$
+  \item d'une réunion d'ensembles $\mathfrak{R}_n\ (n \in \mathbb{N})$ de symboles de relations $n$-aires, où $\mathfrak{R}_0$ est l'ensemble des propositions atomiques qui contient parfois $\{\top,\bot\}$
+  \end{itemize}
+\end{definition}
+\end{frame}
+
+\subsection{Formules}
+
+\begin{frame}
+\begin{definition}
+  On définit les termes, atomes et formules par induction structurelle :
+  \begin{itemize}
+  \item L'ensemble $\mathfrak{T}(L)$ des termes est le plus petit ensemble qui contient $\mathfrak{V}$ et qui est stable par $(t_1,\dots,t_n) \mapsto f(t_1,\dots,t_n)$ pour tout $f \in \mathfrak{F}_n$
+  \item L'ensemble $\mathfrak{A}(L)$ des atomes est l'ensemble des $R(t_1,\dots,t_n)$ où $R \in \mathfrak{R}_n$ et $(t_1,\dots,t_n) \in \mathfrak{T}(L)^n$
+  \item L'ensemble $\mathfrak{F}(L)$ des formules du premier ordre est le plus petit ensemble qui contient $\mathfrak{A}(L)$, et $\neg A,\ A\wedge B,\ A\vee B,\ A\Rightarrow B,\ A\Leftrightarrow B,\ \forall v_n\ A,\ \exists v_n\ A$ lorsqu'il contient $A$ et $B$
+  \end{itemize}
+\end{definition}
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  Les occurences d'une variable $v$ dans une formule $F$ peuvent être liées ou libres :
+  \begin{itemize}
+  \item Si $F = \neg G,\ G\gamma H\ (\gamma\ connecteur),\ \forall w\ G,\ \exists w\ G\ (w \neq v)$ alors les occurences libres dans $F$ sont les occurences libres dans $G$ et $H$
+  \item Si $F = \forall v\ G,\ \exists v\ G$ alors aucunes des occurences n'est liée
+  \end{itemize}
+
+  Les occurences non libres de $v$ sont dites liées.
+
+  Une formule où aucune variable n'a d'occurence libre est dite close.
+
+  On écrit $F[v_1,\dots,v_n]$ pour dire que les variables ayant une occurences libres sont parmi les $v_i$
+
+  La clôture universelle de $F[v_1,\dots,v_n]$ est la formule close $\forall v_1\dots\forall v_n\ F$
+\end{definition}
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  On définit les substitutions dans les termes et les formules :
+  \begin{itemize}
+  \item Si $t$ est un terme, on note $t_{u_1/v_1,\dots,u_n/v_n}$ le terme où on a remplacé les occurences de $v_i$ par le terme $u_i$
+  \item Si $F$ est une formule, on note $F_{u_1/v_1,\dots,u_n/v_n}$ la formule où on a remplacé les occurences libres de $v_i$ par le terme $u_i$.
+  \end{itemize}
+
+  On pourra noter noter $[v_1\rightarrow u_1,\dots,v_n\rightarrow u_n]$ voire $[u_1,\dots,u_n]$ s'il n'y a pas ambiguïté.
+\end{definition}
+\end{frame}
+
+\subsection{Implémentation}
+
+\begin{frame}[fragile]
+  \begin{lstlisting}
+type term = Var of int
+         | Fn of string * term list
+
+type atom = P of string * term list
+
+type fol = False
+         | True
+         | Atom of atom
+         | Not of fol
+         | And of fol * fol
+         | Or of fol * fol
+         | Imp of fol * fol
+         | Iff of fol * fol
+         | Forall of int * fol
+         | Exists of int * fol
+
+  \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\[\exists x \exists y \forall z
+  (F(x,y) \Rightarrow (F(y,z) \wedge F(z,z))) \wedge
+  ((F(x,y) \Rightarrow G(x,y)) \Rightarrow (G(x,z) \wedge G(z,z)))\]
+
+\begin{lstlisting}
+# let f = parse "~(exists x. exists y. forall z.
+        (F(x,y) ==> (F(y,z) /\\ F(z,z))) /\\
+        ((F(x,y) /\\ G(x,y)) ==> (G(x,z) /\\ G(z,z))))";;
+
+    val f : Base.fol =
+  Not
+   (Exists (0,
+     Exists (1,
+      Forall (2,
+       And
+        (Imp (Atom (P ("F", [Var 0; Var 1])),
+          And (Atom (P ("F", [Var 1; Var 2])),
+           Atom (P ("F", [Var 2; Var 2])))),
+        Imp
+         (And (Atom (P ("F", [Var 0; Var 1])),
+           Atom (P ("G", [Var 0; Var 1]))),
+         And (Atom (P ("G", [Var 0; Var 2])), Atom (P ("G", [Var 2; Var 2])))))))))
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}
+
+  \begin{center}
+    \input{tree_f.tex}
+  \end{center}
+
+\end{frame}
+
+\section{Sémantique}
+
+\subsection{Structures et modèles}
+
+\begin{frame}
+\begin{definition}
+  Une $L$-structure $\mathfrak{M}$ est constituée :
+  \begin{itemize}
+  \item d'un ensemble de base $M$
+  \item d'éléments $\overline{c}^{\mathfrak{M}}$ interprétant les symboles de constantes $c \in \mathfrak{C}$
+  \item de fonctions $\overline{f}^{\mathfrak{M}} : M^k \rightarrow M$ interprétant les symboles de fonctions $f \in \mathfrak{F}$
+  \item de sous-ensembles $\overline{R}^{\mathfrak{M}} \subseteq M^k$ interprétant les symboles de relations $R \in \mathfrak{R}$
+  \end{itemize}
+\end{definition}
+\end{frame}
+
+\subsection{Satisfiabilité}
+
+\begin{frame}
+\begin{definition}
+  Un environnement $e$ est une fonction $\mathfrak{V} \rightarrow M$.
+
+  La valeur d'un terme $t$ dans un environnement $e$ est défini par induction :
+  \begin{itemize}
+  \item $V(c) = \overline{c}$
+  \item $V(v) = e(v)$
+  \item $V(f(v_1,\dots,v_n) = f(V(v_1,\dots,V(v_n))$
+  \end{itemize}
+
+  La valeur d'une formule $F$ dans un environnement $e$ est une fonction à valeurs dans $\{0,1\}$ définie par induction avec le sens courant que l'on donne aux symboles.
+\end{definition}
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  On dit que $\mathfrak{M}$ satisfait $F$ dans l'environnement $e$, noté $\mathfrak{M},e \models F$, lorsque $V_{\mathfrak{M}}(F,e) = 1$.
+
+  On dit que $\mathfrak{M}$ satisfait $F$, ou $\mathfrak{M}$ est un modèle de $F$, noté $\mathfrak{M} \models F$, lorsque $\mathfrak{M}$ satisfait $F$ dans tout environnement $e$, où de manière équivalente que $\mathfrak{M}$ satisfait la clôture universelle de $F$.
+\end{definition}
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  \begin{itemize}
+  \item Une formule close $F$ est universellement valide, noté $\models F$, si elle est satisfaite dans toute $L$-structure.\\
+    Si $\models\neg F$, on dit que $F$ est contradictoire.
+  \item Deux formules $F$ et $G$ sont universellement équivalentes, noté $F \sim G$, si $\models F \Leftrightarrow G$.
+  \item Une théorie est un ensemble de formules closes, souvent appelées axiomes.
+  \item Une $L$-structure $\mathfrak{M}$ satisfait la théorie $T$, ou est un modèle de $T$, noté $\mathfrak{M} \models T$, lorsque $\mathfrak{M}$ satisfait toutes les formules de $T$.
+  \item Une théorie $T$ est consistente si elle admet un modèle, sinon elle est contradictoire.
+  \item Une formule close $F$ est conséquence sémantique de $T$ si $\mathfrak{M} \models F$ pour tout modèle $\mathfrak{M}$ de $T$.
+  \item Deux théories $T_1$ et $T_2$ sont équivalentes lorsque $\forall F \in T_1, T_2 \models F$ et inversement.
+  \end{itemize}
+\end{definition}
+\end{frame}
+
+\subsection{Compacité}
+
+\begin{frame}
+\begin{theorem}[Tychonov]
+  L'espace topologique produit d'une famille d'espaces compacts est compact.
+\end{theorem}
+
+\begin{theorem}[Compacité du calcul propositionnel]
+  Un ensemble $T$ de formules du calcul propositionnel est satisfiable si et seulement si $T$ est finiment satisfiable.
+\end{theorem}
+
+\begin{theorem}[Compacité du calcul des prédicats]
+  Une théorie $T$ dans un langage du premier ordre est consistente si et seulement si $T$ est finiment consistente.
+\end{theorem}
+\end{frame}
+
+\begin{frame}
+\begin{lemma}
+  Soient $A_1,\dots,A_n$ des variables propositionnelles, $J[A_1,\dots,A_n]$ une formule propositionnelle, et $F_1,\dots,F_n$ des formules du premier ordre.
+  Si $J$ est une tautologie, alors $\models J[F_1,\dots,F_n]$.
+\end{lemma}
+
+\begin{lemma}
+  Si $G$ est une sous-formule de $F$, et $G \sim G'$, alors $F \sim F'$ obtenue à partir de $F$ en remplaçant une occurence de $G$ par $G'$.
+\end{lemma}
+
+\begin{theorem}
+  Toute formule du premier ordre est universellement équivalente à une formule n'utilisant que les symboles de connecteur d'un système complet ainsi que l'un des symboles de quantification $\forall$ et $\exists$.
+\end{theorem}
+\end{frame}
+
+\begin{frame}
+Une formule est sous forme prénexe si elle s'écrit $Q_1v_1\dots Q_nv_n\, F$ où $Q_1,\dots,Q_n$ sont des quantificateurs, $v_1,\dots,v_n$ sont des variables et $F$ est une formule sans quantificateur. On appelle alors $Q_1v_1\dots Q_nv_n$ son préfixe.\\
+Une formule sous forme prénexe est polie si les variables quantifiées sont deux à deux distinctes.\\
+Une forme prénexe est universelle (resp. existentielle) si elle ne contient pas de quantificateur existentiel (resp. universel).
+
+\begin{theorem}
+  Toute formule du premier ordre est universellement équivalente à une formule sous forme prénexe polie.
+\end{theorem}
+\end{frame}
+
+\begin{frame}[fragile]
+\begin{lstlisting}
+# prenex f;;
+
+- : Base.fol =
+Forall (0,
+ Forall (1,
+  Exists (2,
+   Or
+    (And (Atom (P ("F", [Var 0; Var 1])),
+      Or (Not (Atom (P ("F", [Var 1; Var 2]))),
+       Not (Atom (P ("F", [Var 2; Var 2]))))),
+    And
+     (And (Atom (P ("F", [Var 0; Var 1])), Atom (P ("G", [Var 0; Var 1]))),
+     Or (Not (Atom (P ("G", [Var 0; Var 2]))),
+      Not (Atom (P ("G", [Var 2; Var 2])))))))))
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}
+  \begin{center}
+    \input{tree_prenex.tex}
+  \end{center}
+\end{frame}
+
+\begin{frame}
+On appelle forme de Skolem de $F$ la formule $F_S$ obtenue à partir de $F$ en remplaçant les variables quantifiées existentiellement par de nouveaux symboles de fonction appelés fonctions de Skolem.
+\begin{theorem}
+  $F$ et sa forme de Skolem $F_S$ sont équisatisfiables.
+\end{theorem}
+\end{frame}
+
+\begin{frame}[fragile]
+\begin{lstlisting}[name=interp]
+# skolemization f;;
+
+- : Base.fol =
+Forall (0,
+ Forall (1,
+  Or
+   (And (Atom (P ("F", [Var 0; Var 1])),
+     Or (Not (Atom (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))),
+      Not
+       (Atom
+         (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))))),
+   And (And (Atom (P ("F", [Var 0; Var 1])), Atom (P ("G", [Var 0; Var 1]))),
+    Or (Not (Atom (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]))),
+     Not
+      (Atom
+        (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))))))))
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}
+  \begin{center}
+    \input{tree_skolem.tex}
+  \end{center}
+\end{frame}
+
+\section{Démonstration}
+
+\subsection{Séquents}
+
+\begin{frame}
+Deux règles de déduction :
+
+\begin{itemize}
+\item Le modus ponens :
+\AxiomC{$F,\ F \Rightarrow G$}
+\UnaryInfC{$G$}
+\DisplayProof
+\item La règle de généralisation :
+\AxiomC{$F$}
+\UnaryInfC{$\forall v\ F$}
+\DisplayProof
+\end{itemize}
+
+Des axiomes logiques :
+
+\begin{itemize}
+\item Les tautologies
+\item Les axiomes de quantificateurs :
+  \begin{itemize}
+  \item $\exists v\ F \Leftrightarrow \neg\forall v\ \neg F$
+  \item $\forall v\ (F \Rightarrow G) \Rightarrow (F \Rightarrow \forall v\ G)$ si $v$ n'a pas d'occurence dans $F$
+  \item $\forall v\ F \Rightarrow F_{t/v}$ si les occurences libres de $v$ ne sont pas dans le champ d'un quantificateur liant une variable de $t$
+  \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  On appelle démonstration de $F$ dans $T$ une suite $\mathfrak{D} = (F_0,\dots,F_n)$ avec $F_n = F$ vérifiant pour tout $i$ une des conditions suivantes :
+  \begin{itemize}
+  \item $F_i \in T$
+  \item $F_i$ est un axiome logique
+  \item $F_i$ se déduit à partir de formules parmi $F_0,\dots,F_{i-1}$ et d'une règle de déduction
+  \end{itemize}
+  S'il existe un démonstration de $F$ dans $T$ on dit que $F$ est conséquence syntaxique de $T$, ou que $T$ démontre $F$, noté $T \vdash F$.
+\end{definition}
+
+\begin{definition}
+  \begin{itemize}
+  \item $T$ est cohérente si on n'a jamais $T\vdash F$ et $T\vdash\neg F$, ou de manière équivalente $T\not\vdash\bot$, ou encore il existe une formule $F$ telle que $T\not\vdash F$.
+  \item $T$ est complète si $T$ est cohérente et pour toute formule close $F$, $T\vdash F$ ou $T\vdash\neg F$.
+  \end{itemize}
+\end{definition}
+\end{frame}
+
+\begin{frame}
+\begin{theorem}
+  Soit $F$ une formule close. Si $T,F\vdash G$, alors $T\vdash F\Rightarrow G$.
+\end{theorem}
+
+\begin{corollary}
+  $T\vdash F$ si et seulement si $T\cup\{\neg F\}$ est incohérente.
+\end{corollary}
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  Une preuve par réfutation de $F$ dans $T$ est la démonstration $T,F\vdash\bot$.
+\end{definition}
+
+\begin{theorem}
+  Si $T \vdash F$, alors $T \models F'$ où $F'$ est une clôture universelle de $F$.
+\end{theorem}
+
+\begin{corollary}
+  Si $T$ est consistante, alors $T$ est cohérente.
+\end{corollary}
+\end{frame}
+
+\begin{frame}
+\begin{theorem}
+  Si $T$ est cohérente, alors $T$ est consistante.
+\end{theorem}
+
+\begin{theorem}[Complétude du calcul des prédicats]
+  Soient $T$ une théorie et $F$ une formule close, $T\vdash F$ si et seulement si $T\models F$.
+\end{theorem}
+\end{frame}
+
+\subsection{Conversion}
+
+\begin{frame}[fragile]
+\begin{definition}
+  \begin{itemize}
+  \item Un littéral $L$ est un atome $A$ ou sa négation $\neg A$.
+  \item Une clause est une disjonction de littéraux $L_1\vee\dots\vee L_n$. On peut aussi écrire $A_1\wedge\dots\wedge A_m\Rightarrow B_1\vee\dots\vee B_n$ où $A1_,\dots,A_m,B_1,\dots,B_n$ sont des atomes, auquel cas on appelle $A_1\wedge\dots\wedge A_m$ la prémisse et $B_1\vee\dots\vee B_n$ la conclusion de la clause.
+  \item Une formule du premier ordre sous forme normale clausale est une conjonction de clauses $\bigwedge_i\bigvee_j L_{ij}$.
+\end{itemize}
+\end{definition}
+
+\begin{theorem}
+  Toute formule $F$ admet une forme normale clausale équisatisfiable.
+\end{theorem}
+
+\begin{lstlisting}
+type literal = L of atom | NL of atom
+
+type clause = literal list
+
+type cnf = clause list
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]
+\begin{lstlisting}
+# let c = convert_to_cnf f;;
+
+val c : Base.cnf =
+  [[L (P ("F", [Var 0; Var 1])); L (P ("F", [Var 0; Var 1]))];
+   [L (P ("F", [Var 0; Var 1])); L (P ("G", [Var 0; Var 1]))];
+   [L (P ("F", [Var 0; Var 1]));
+    NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    L (P ("F", [Var 0; Var 1]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    L (P ("G", [Var 0; Var 1]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))]]
+\end{lstlisting}
+\end{frame}
+
+\subsection{Démonstration par coupure}
+
+\begin{frame}
+\begin{itemize}
+\item La règle de simplification :
+  \AxiomC{$A\vee A\vee B_1\vee\dots\vee B_n$}
+  \UnaryInfC{$B_1\vee\dots\vee B_n$}
+  \DisplayProof
+  où $A,B_1,\dots,B_n$ sont des littéraux.
+\item La règle de coupure qui généralise le modus ponens :
+  \AxiomC{$A\vee B_1\vee\dots\vee B_m,\ \neg A\vee C_1\vee\dots\vee C_n$}
+  \UnaryInfC{$B_1\vee\dots B_m\vee C_1\vee\dots\vee C_n$}
+  \DisplayProof
+  où $A,B_1,\dots,B_m,C_1,\dots,C_n$ sont des littéraux.
+\end{itemize}
+
+On peut combiner les deux règles :
+\AxiomC{$A\vee\dots\vee A\vee B_1\vee\dots\vee B_m,\ \neg A\vee\dots\vee\neg A\vee C_1\vee\dots\vee C_n$}
+\UnaryInfC{$B_1\vee\dots B_m\vee C_1\vee\dots\vee C_n$}
+\DisplayProof
+\end{frame}
+
+\begin{frame}
+\begin{theorem}[Complétude de la démonstration par coupure]
+  Tout ensemble de clauses insatisfiable est réfutable par coupure.
+\end{theorem}
+
+Pour déterminer si un ensemble $\Gamma$ est satisfiable, on élimine d'abord les tautologies et on simplifie les clauses, puis on applique exhaustivement la règle de coupure sur tous les couples de clauses. Le nombre de clauses simplifiées est fini donc la procédure termine, il suffit alors de regarder si on a pu dériver la clause vide.
+\end{frame}
+
+\subsection{Démonstration par résolution}
+
+\begin{frame}
+\begin{definition}
+  Soit $S = \{(t_1,u_1),\dots,(t_n,u_n)\}$ un ensemble de couples de termes. On appelle unificateur de $S$ toute substitution $\sigma$ telle que $\sigma(t_i)=\sigma(u_i)$ pour tout $i$.
+
+  On appelle unificateur principal de $S$ tout unificateur $\pi$ tel que si $\sigma$ est un unificateur de $S$ il existe une substitution $\tau$ telle que $\sigma=\tau\circ\pi$.
+\end{definition}
+
+\begin{theorem}
+  Si $S$ admet un unificateur, alors $S$ admet un unificateur principal.
+\end{theorem}
+\end{frame}
+
+\begin{frame}
+On introduit deux procédures :
+\begin{itemize}
+\item Réduction : si $(f(t_1,\dots,t_n),f(u_1,\dots,u_n)) \in S$, on remplace le couple dans $S$ par les couples $(t_1,u_1),\dots,(t_n,u_n)$.
+\item Elimination : si $(v,t) \in S$ où $v$ est une variable, on applique la substitution $(v\Rightarrow t)$ à chaque membre des autres couples de $S$.
+\end{itemize}
+
+On exécute les procédures suivantes tant que possible :
+\begin{itemize}
+\item Si $(t,v)\in S$ où $v$ est une variable mais pas $t$, on remplace le couple par $(v,t)$.
+\item Si $(v,v)\in S$ où $v$ est une variable, on retire le couple de $S$.
+\item Si $(t,u)\in S$ où $t$ et $u$ ne sont pas des variables, si $t$ et $u$ ne commencent pas par les mêmes symboles de fonction on termine avec échec, sinon on applique la réduction.
+\item Si $(v,t)\in S$ où $v$ est une variable qui a une autre occurrence dans $S$ et $v\neq t$, si $v$ a une occurrence dans $t$ on termine avec échec, sinon on applique l'élimination.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+  Unification du système $\{(f(v_0,g(v_1,a)),f(f(b),g(h(c,v_2),v_2))\}$, dont un unificateur principal est $[v_0\rightarrow f(b),v_1\rightarrow h(c,a),v_2\rightarrow a]$.\\
+
+\begin{lstlisting}
+# let t1 = Fn ("f", [Var 0; Fn ("g", [Var 1; Fn ("a", [])])]);;
+# let t2 = Fn ("f", [Fn ("f", [Fn ("b", [])]); Fn ("g", [Fn ("h", [Fn ("c", []); Var 2]); Var 2])]);;
+# let g = global_make 16;;
+# unify_terms g t1 t2;;
+- : bool = true
+# g;;
+- : Base.global =
+{graph =
+  [|{n = T (Fn ("f", [Fn ("b", [])])); p = 0; r = -2};
+    {n = T (Fn ("h", [Fn ("c", []); Fn ("a", [])])); p = 1; r = -2};
+    {n = T (Fn ("a", [])); p = 2; r = -2}; ... \];
+ max = -1; vars = [2; 1; 0]}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}
+  L'algorithme précédent a une complexité temporelle exponentielle. On peut obtenir un algorithme presque linéaire en utilisant la structure de graphe orienté acyclique pour représenter les termes et les substitutions, et la structure Union-Set pour calculer les affectations, ainsi le test occur-check n'est mené q'une seule fois à la fin pour déterminer si le graphe est bien acyclique.
+\begin{center}
+  \begin{tikzpicture}
+    \begin{scope}[scale={\trees}]
+      \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+        \node [above] at (0,0) {$p$};
+        \draw[->] (0,0) -- ({0.000000*\treel},{-\treeh});
+        \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+          \node [above] at (0,0) {$f$};
+          \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+          \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$v_0$};
+            \draw[->][lightgray] (0,0) to [out=-45, in=-135] ({4-0.25*\treel},0);
+          \end{scope}
+          \draw[->] (0,0) -- ({0.500000*\treel},{-\treeh});
+          \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$g$};
+            \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$v_1$};
+              \draw[->][lightgray] (0,0) to [out=-45, in=-135] ({4+0.25*\treel},0);
+            \end{scope}
+            \draw[->] (0,0) -- ({0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$a$};
+            \end{scope}
+          \end{scope}
+        \end{scope}
+      \end{scope}
+    \end{scope}
+
+    \begin{scope}[scale={\trees}, shift={(4,0)}]
+      \begin{scope}[shift={({0.750000*\treel},{-\treehh})}]
+        \node [above] at (0,0) {$p$};
+        \draw[->] (0,0) -- ({0.000000*\treel},{-\treeh});
+        \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+          \node [above] at (0,0) {$f$};
+          \draw[->] (0,0) -- ({-0.750000*\treel},{-\treeh});
+          \begin{scope}[shift={({-0.750000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$f$};
+            \draw[->] (0,0) -- ({0.000000*\treel},{-\treeh});
+            \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$b$};
+            \end{scope}
+          \end{scope}
+          \draw[->] (0,0) -- ({0.750000*\treel},{-\treeh});
+          \begin{scope}[shift={({0.750000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$g$};
+            \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$h$};
+              \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+              \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+                \node [above] at (0,0) {$c$};
+              \end{scope}
+              \draw[->] (0,0) -- ({0.500000*\treel},{-\treeh});
+              \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+                \node [above] at (0,0) {$v_2$};
+                \draw[->][lightgray] (0,0) to [out=-135, in=45] ({+0.25*\treel-4},{0.75*\treeh+\treehh});
+              \end{scope}
+            \end{scope}
+            \draw[->] (0,0) to [out=-45,in=45] (0,{-\treeh-\treehh});
+          \end{scope}
+        \end{scope}
+      \end{scope}
+    \end{scope}
+  \end{tikzpicture}
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+
+Soient $C$ et $D$ deux clauses séparées. Soient $X\subseteq C^+$ et $Y\subseteq D^-$ non vides tels que $X\cup Y$ soit unifiable. Alors la règle de résolution s'écrit
+
+\begin{center}
+  \AxiomC{$C,\ D'$}
+  \UnaryInfC{$\pi_{X\cup Y}(C\setminus X,\ D'\setminus Y)$}
+  \DisplayProof
+\end{center}
+
+où $\pi$ est un unificateur principal.
+
+\begin{theorem}
+  Si $E$ se déduit de $C,D$, tout modèle de $C,D$ est aussi un modèle de $E$.
+\end{theorem}
+
+\begin{definition}
+  Soi $\Gamma$ un ensemble de clause. On appelle réfutation de $\Gamma$ toute suite de clause $(C_1,\dots,C_n)$ se terminant par la clause vide telle que pour tout $i$, $C_i\in \Gamma$ ou $C_i$ se déduit de deux clauses antérieures de la suite. On dit que $\Gamma$ est réfutable s'il existe une réfutation de $\Gamma$.
+\end{definition}
+\end{frame}
+
+\begin{frame}
+\begin{theorem}[Complétude de la méthode de résolution]
+  Un ensemble de clauses $\Gamma$ est réfutable si et seulement si $\Gamma$ est inconsistant.
+\end{theorem}
+
+Méthode de Herbrand : on cherche un modèle dont l'ensemble de base est $\mathfrak{T}(L)$, et les symboles fonctions ont leur interprétation naturelle. Pour tout $\delta\in\{0,1\}^{\mathfrak{A}(L)}$ on définit une interprétation $\mathfrak{I}_\delta$ dans laquelle si $R$ est un symbole de relation et $t_1,\dots,t_n$ des termes, $(t_1,\dots,t_n)\in R$ si et seulement si $\delta(R(t_1,\dots,t_n))=1$.
+
+On se ramène ainsi au calcul propositionnel sur lequel on a une procédure de réfutation complète, à partir de laquelle on peut déduire une réfutation du premier ordre.\\
+
+Ainsi pour savoir si $\Gamma\models F$, on essaie de réfuter $\Gamma,\neg F$.
+On maintient deux listes correspondant aux clauses utilisées et non utilisée, et on défile la liste non utilisées en résolvant chaque clause avec toutes les clauses de la liste utilisées, jusqu'à déduire la clause vide ou vider la liste non utilisées. Si $F$ est prouvable l'algorithme termine.
+\end{frame}
+
+\begin{frame}
+\begin{definition}
+  Une clause $C$ subsume une clause $D$, noté $C\leq D$, s'il existe une substitution $\sigma$ telle que $\sigma(C)\subseteq D$.
+\end{definition}
+
+\begin{theorem}
+  Si $C\leq C'$, alors tout résolvant de $C',D$ est subsumé par $C$ ou un résolvant de $C,D$.
+\end{theorem}
+
+\begin{corollary}
+  Si $\Gamma\vdash C'$, alors il existe une démonstration $\Gamma\vdash C\leq C'$ où aucune clause n'est subsumée par une clause antérieure.
+\end{corollary}
+
+On peut donc ignorer les résolvants subsumés par des clauses antérieures, et remplacer les clauses subsumées par les résolvants dans la liste utilisées.
+\end{frame}
+
+\begin{frame}
+\begin{theorem}
+  Soit $\mathfrak{M}$ une $L$-structure. Si $\Gamma$ est réfutable, il existe une réfutation qui ne résoud deux clauses que si l'une au moins n'est pas satisfaite dans $\mathfrak{M}$.
+\end{theorem}
+
+Si $\Gamma$ satisfait les deux clauses la contradiction doit venir des autres clauses, donc on peut trouver une telle réfutation.
+
+La résolution positive est un cas particulier où l'on choisit une interprétation dans laquelle toutes les formules atomiques sont fausses, les résolutions font donc toujours intervenir au moins une clause constituée uniquement de littéraux positifs.
+\end{frame}
+
+\end{document}

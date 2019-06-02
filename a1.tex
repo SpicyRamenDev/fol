@@ -1,0 +1,506 @@
+\documentclass[a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{stmaryrd}
+\usepackage{courier}
+\usepackage{graphicx}
+\usepackage{mathabx}
+\usepackage{tikz}
+\usepackage{pgffor}
+\usepackage{pdfpages}
+\usepackage{listings}
+\usepackage{array}
+\usepackage[a4paper, margin=2cm]{geometry}
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{bussproofs}
+\usepackage{latexsym}
+
+\def\fCenter{{\mbox{\Large$\rightarrow$}}}
+
+\hypersetup{
+  colorlinks=true,
+  linktoc=all,
+  linkcolor=black,
+}
+
+\lstset{
+  language=[Objective]caml,
+  frame=lines,
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny,
+  showstringspaces=false
+}
+
+\title{Démonstration automatique de théorèmes\\- Annexe -}
+\author{Nicolas Daire}
+\date{}
+
+\begin{document}
+
+\newcommand{\treel}{.8}
+\newcommand{\treeh}{0.6}
+\newcommand{\treehh}{1.1}
+\newcommand{\trees}{1}
+
+\maketitle
+
+\lstinputlisting[title=base.mli]{base.mli}
+
+\lstinputlisting[title=parse.mli]{parse.mli}
+
+\lstinputlisting[title=parse.ml]{parse.ml}
+
+\lstinputlisting[title=fol\_manip.mli]{fol_manip.mli}
+
+\lstinputlisting[title=fol\_manip.ml]{fol_manip.ml}
+
+\lstinputlisting[title=disp.mli]{disp.mli}
+
+\lstinputlisting[title=disp.ml]{disp.ml}
+
+\lstinputlisting[title=resolution.mli]{resolution.mli}
+
+\lstinputlisting[title=resolution.ml]{resolution.ml}
+
+\newpage
+Unification du système $\{(f(v_0,g(v_1,a)),f(f(b),g(h(c,v_2),v_2))\}$, dont un unificateur principal est $[v_0\rightarrow f(b),v_1\rightarrow h(c,a),v_2\rightarrow a]$.\\
+
+\begin{lstlisting}
+# let t1 = Fn ("f", [Var 0; Fn ("g", [Var 1; Fn ("a", [])])]);;
+
+val t1 : Base.term = Fn ("f", [Var 0; Fn ("g", [Var 1; Fn ("a", [])])])
+
+# let t2 = Fn ("f", [Fn ("f", [Fn ("b", [])]); Fn ("g", [Fn ("h", [Fn ("c", []); Var 2]); Var 2])]);;
+
+val t2 : Base.term =
+  Fn ("f",
+   [Fn ("f", [Fn ("b", [])]);
+    Fn ("g", [Fn ("h", [Fn ("c", []); Var 2]); Var 2])])
+
+# let g = global_make 16;;
+
+val g : Base.global =
+  {graph =
+    [|{n = Nil; p = 0; r = -1}; {n = Nil; p = 1; r = -1};
+      {n = Nil; p = 2; r = -1}; {n = Nil; p = 3; r = -1};
+      {n = Nil; p = 4; r = -1}; {n = Nil; p = 5; r = -1};
+      {n = Nil; p = 6; r = -1}; {n = Nil; p = 7; r = -1};
+      {n = Nil; p = 8; r = -1}; {n = Nil; p = 9; r = -1};
+      {n = Nil; p = 10; r = -1}; {n = Nil; p = 11; r = -1};
+      {n = Nil; p = 12; r = -1}; {n = Nil; p = 13; r = -1};
+      {n = Nil; p = 14; r = -1}; {n = Nil; p = 15; r = -1}|];
+   max = -1; vars = []}
+
+# unify_terms g t1 t2;;
+
+- : bool = true
+
+# g;;
+
+- : Base.global =
+{graph =
+  [|{n = T (Fn ("f", [Fn ("b", [])])); p = 0; r = -2};
+    {n = T (Fn ("h", [Fn ("c", []); Fn ("a", [])])); p = 1; r = -2};
+    {n = T (Fn ("a", [])); p = 2; r = -2}; {n = Nil; p = 3; r = -1};
+    {n = Nil; p = 4; r = -1}; {n = Nil; p = 5; r = -1};
+    {n = Nil; p = 6; r = -1}; {n = Nil; p = 7; r = -1};
+    {n = Nil; p = 8; r = -1}; {n = Nil; p = 9; r = -1};
+    {n = Nil; p = 10; r = -1}; {n = Nil; p = 11; r = -1};
+    {n = Nil; p = 12; r = -1}; {n = Nil; p = 13; r = -1};
+    {n = Nil; p = 14; r = -1}; {n = Nil; p = 15; r = -1}|];
+ max = -1; vars = [2; 1; 0]}
+
+# let s = (fun x -> match g.graph.(x).n with T t -> t | _ -> Var x);;
+
+val s : int -> Base.term = <fun>
+
+# substitute_term s t1;;
+
+- : Base.term =
+Fn ("f",
+ [Fn ("f", [Fn ("b", [])]);
+  Fn ("g", [Fn ("h", [Fn ("c", []); Fn ("a", [])]); Fn ("a", [])])])
+
+# substitute_term s t2;;
+
+- : Base.term =
+Fn ("f",
+ [Fn ("f", [Fn ("b", [])]);
+  Fn ("g", [Fn ("h", [Fn ("c", []); Fn ("a", [])]); Fn ("a", [])])])
+\end{lstlisting}
+
+\begin{center}
+  \begin{tikzpicture}
+    \begin{scope}[scale={\trees}]
+      \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+        \node [above] at (0,0) {$p$};
+        \draw[->] (0,0) -- ({0.000000*\treel},{-\treeh});
+        \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+          \node [above] at (0,0) {$f$};
+          \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+          \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$v_0$};
+            \draw[->][lightgray] (0,0) to [out=-45, in=-135] ({4-0.25*\treel},0);
+          \end{scope}
+          \draw[->] (0,0) -- ({0.500000*\treel},{-\treeh});
+          \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$g$};
+            \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$v_1$};
+              \draw[->][lightgray] (0,0) to [out=-45, in=-135] ({4+0.25*\treel},0);
+            \end{scope}
+            \draw[->] (0,0) -- ({0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$a$};
+            \end{scope}
+          \end{scope}
+        \end{scope}
+      \end{scope}
+    \end{scope}
+
+    \begin{scope}[scale={\trees}, shift={(4,0)}]
+      \begin{scope}[shift={({0.750000*\treel},{-\treehh})}]
+        \node [above] at (0,0) {$p$};
+        \draw[->] (0,0) -- ({0.000000*\treel},{-\treeh});
+        \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+          \node [above] at (0,0) {$f$};
+          \draw[->] (0,0) -- ({-0.750000*\treel},{-\treeh});
+          \begin{scope}[shift={({-0.750000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$f$};
+            \draw[->] (0,0) -- ({0.000000*\treel},{-\treeh});
+            \begin{scope}[shift={({0.000000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$b$};
+            \end{scope}
+          \end{scope}
+          \draw[->] (0,0) -- ({0.750000*\treel},{-\treeh});
+          \begin{scope}[shift={({0.750000*\treel},{-\treehh})}]
+            \node [above] at (0,0) {$g$};
+            \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+            \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+              \node [above] at (0,0) {$h$};
+              \draw[->] (0,0) -- ({-0.500000*\treel},{-\treeh});
+              \begin{scope}[shift={({-0.500000*\treel},{-\treehh})}]
+                \node [above] at (0,0) {$c$};
+              \end{scope}
+              \draw[->] (0,0) -- ({0.500000*\treel},{-\treeh});
+              \begin{scope}[shift={({0.500000*\treel},{-\treehh})}]
+                \node [above] at (0,0) {$v_2$};
+                \draw[->][lightgray] (0,0) to [out=-135, in=45] ({+0.25*\treel-4},{0.75*\treeh+\treehh});
+              \end{scope}
+            \end{scope}
+            \draw[->] (0,0) to [out=-45,in=45] (0,{-\treeh-\treehh});
+          \end{scope}
+        \end{scope}
+      \end{scope}
+    \end{scope}
+  \end{tikzpicture}
+\end{center}
+
+\newpage
+On teste la méthode de résolution sur la formule suivante :
+
+\[\exists x \exists y \forall z
+  (F(x,y) \Rightarrow (F(y,z) \wedge F(z,z))) \wedge
+  ((F(x,y) \Rightarrow G(x,y)) \Rightarrow (G(x,z) \wedge G(z,z)))\]
+
+\begin{lstlisting}[title=interpréteur, name=interp]
+# let f = parse "~(exists x. exists y. forall z.
+        (F(x,y) ==> (F(y,z) /\\ F(z,z))) /\\
+        ((F(x,y) /\\ G(x,y)) ==> (G(x,z) /\\ G(z,z))))";;
+
+    val f : Base.fol =
+  Not
+   (Exists (0,
+     Exists (1,
+      Forall (2,
+       And
+        (Imp (Atom (P ("F", [Var 0; Var 1])),
+          And (Atom (P ("F", [Var 1; Var 2])),
+           Atom (P ("F", [Var 2; Var 2])))),
+        Imp
+         (And (Atom (P ("F", [Var 0; Var 1])),
+           Atom (P ("G", [Var 0; Var 1]))),
+         And (Atom (P ("G", [Var 0; Var 2])), Atom (P ("G", [Var 2; Var 2])))))))))
+
+# let t = tree_of_fol true f;;
+
+val t : string Base.tree =
+  Tree ("$\\neg$",
+   [Tree ("$\\exists v_0$",
+     [Tree ("$\\exists v_1$",
+       [Tree ("$\\forall v_2$",
+         [Tree ("$\\wedge$",
+           [Tree ("$\\Rightarrow$",
+             [Tree ("F", [Tree ("$v_0$", []); Tree ("$v_1$", [])]);
+              Tree ("$\\wedge$",
+               [Tree ("F", [Tree ("$v_1$", []); Tree ("$v_2$", [])]);
+                Tree ("F", [Tree ("$v_2$", []); Tree ("$v_2$", [])])])]);
+            Tree ("$\\Rightarrow$",
+             [Tree ("$\\wedge$",
+               [Tree ("F", [Tree ("$v_0$", []); Tree ("$v_1$", [])]);
+                Tree ("G", [Tree ("$v_0$", []); Tree ("$v_1$", [])])]);
+              Tree ("$\\wedge$",
+               [Tree ("G", [Tree ("$v_0$", []); Tree ("$v_2$", [])]);
+                Tree ("G", [Tree ("$v_2$", []); Tree ("$v_2$", [])])])])])])])])])
+
+# let tl = layout_compact t;;
+
+val tl : string Base.tree_l =
+  Tree_l ("$\\neg$",
+   [Tree_l ("$\\exists v_0$",
+     [Tree_l ("$\\exists v_1$",
+       [Tree_l ("$\\forall v_2$",
+         [Tree_l ("$\\wedge$",
+           [Tree_l ("$\\Rightarrow$",
+             [Tree_l ("F",
+               [Tree_l ("$v_0$", [], -0.5); Tree_l ("$v_1$", [], 0.5)],
+               -1.25);
+              Tree_l ("$\\wedge$",
+               [Tree_l ("F",
+                 [Tree_l ("$v_1$", [], -0.5); Tree_l ("$v_2$", [], 0.5)],
+                 -1.);
+                Tree_l ("F",
+                 [Tree_l ("$v_2$", [], -0.5); Tree_l ("$v_2$", [], 0.5)], 1.)],
+               1.25)],
+             -3.625);
+            Tree_l ("$\\Rightarrow$",
+             [Tree_l ("$\\wedge$",
+               [Tree_l ("F",
+                 [Tree_l ("$v_0$", [], -0.5); Tree_l ("$v_1$", [], 0.5)],
+                 -1.);
+                Tree_l ("G",
+                 [Tree_l ("$v_0$", [], -0.5); Tree_l ("$v_1$", [], 0.5)], 1.)],
+               -2.);
+              Tree_l ("$\\wedge$",
+               [Tree_l ("G",
+                 [Tree_l ("$v_0$", [], -0.5); Tree_l ("$v_2$", [], 0.5)],
+                 -1.);
+                Tree_l ("G",
+                 [Tree_l ("$v_2$", [], -0.5); Tree_l ("$v_2$", [], 0.5)], 1.)],
+               2.)],
+             3.625)],
+           0.)],
+         0.)],
+       0.)],
+     0.)],
+   5.375)
+\end{lstlisting}
+
+\input{tree_f.tex}
+
+\begin{lstlisting}[name=interp]
+# nnf false f;;
+
+- : Base.fol =
+Forall (0,
+ Forall (1,
+  Exists (2,
+   Or
+    (And (Atom (P ("F", [Var 0; Var 1])),
+      Or (Not (Atom (P ("F", [Var 1; Var 2]))),
+       Not (Atom (P ("F", [Var 2; Var 2]))))),
+    And
+     (And (Atom (P ("F", [Var 0; Var 1])), Atom (P ("G", [Var 0; Var 1]))),
+     Or (Not (Atom (P ("G", [Var 0; Var 2]))),
+      Not (Atom (P ("G", [Var 2; Var 2])))))))))
+\end{listlisting}
+
+\input{tree_nnf.tex}
+
+\begin{lstlisting}[name=interp]
+# prenex f;;
+
+- : Base.fol =
+Forall (0,
+ Forall (1,
+  Exists (2,
+   Or
+    (And (Atom (P ("F", [Var 0; Var 1])),
+      Or (Not (Atom (P ("F", [Var 1; Var 2]))),
+       Not (Atom (P ("F", [Var 2; Var 2]))))),
+    And
+     (And (Atom (P ("F", [Var 0; Var 1])), Atom (P ("G", [Var 0; Var 1]))),
+     Or (Not (Atom (P ("G", [Var 0; Var 2]))),
+      Not (Atom (P ("G", [Var 2; Var 2])))))))))
+\end{lstlisting}
+
+\input{tree_prenex.tex}
+
+\begin{lstlisting}[name=interp]
+# skolemization f;;
+
+- : Base.fol =
+Forall (0,
+ Forall (1,
+  Or
+   (And (Atom (P ("F", [Var 0; Var 1])),
+     Or (Not (Atom (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))),
+      Not
+       (Atom
+         (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))))),
+   And (And (Atom (P ("F", [Var 0; Var 1])), Atom (P ("G", [Var 0; Var 1]))),
+    Or (Not (Atom (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]))),
+     Not
+      (Atom
+        (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))))))))
+\end{lstlisting}
+
+\input{tree_skolem.tex}
+
+\begin{lstlisting}[name=interp]
+# distribute f;;
+
+- : Base.fol =
+And
+ (And
+   (And (Or (Atom (P ("F", [Var 0; Var 1])), Atom (P ("F", [Var 0; Var 1]))),
+     Or (Atom (P ("F", [Var 0; Var 1])), Atom (P ("G", [Var 0; Var 1])))),
+   Or (Atom (P ("F", [Var 0; Var 1])),
+    Or (Not (Atom (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]))),
+     Not
+      (Atom
+        (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])])))))),
+ And
+  (And
+    (Or
+      (Or (Not (Atom (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))),
+        Not
+         (Atom
+           (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])])))),
+      Atom (P ("F", [Var 0; Var 1]))),
+    Or
+     (Or (Not (Atom (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))),
+       Not
+        (Atom
+          (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])])))),
+     Atom (P ("G", [Var 0; Var 1])))),
+  Or
+   (Or (Not (Atom (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))),
+     Not
+      (Atom
+        (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])])))),
+   Or (Not (Atom (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]))),
+    Not
+     (Atom
+       (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])])))))))
+\end{lstlisting}
+
+\renewcommand{\treel}{0.4}
+\input{tree_distr.tex}
+\renewcommand{\treel}{0.8}
+
+\begin{lstlisting}[name=interp]
+# let c = convert_to_cnf f;;
+
+val c : Base.cnf =
+  [[L (P ("F", [Var 0; Var 1])); L (P ("F", [Var 0; Var 1]))];
+   [L (P ("F", [Var 0; Var 1])); L (P ("G", [Var 0; Var 1]))];
+   [L (P ("F", [Var 0; Var 1]));
+    NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    L (P ("F", [Var 0; Var 1]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    L (P ("G", [Var 0; Var 1]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))]]
+
+# let g = global_make 10;;
+
+val g : Base.global =
+  {graph =
+    [|{n = Nil; p = 0; r = -1}; {n = Nil; p = 1; r = -1};
+      {n = Nil; p = 2; r = -1}; {n = Nil; p = 3; r = -1};
+      {n = Nil; p = 4; r = -1}; {n = Nil; p = 5; r = -1};
+      {n = Nil; p = 6; r = -1}; {n = Nil; p = 7; r = -1};
+      {n = Nil; p = 8; r = -1}; {n = Nil; p = 9; r = -1}|];
+   max = -1; vars = []}
+
+# let u::v::w::x::y::z = c;;
+
+# resolve_binary g [] [] u [] x;;
+
+- : Base.literal list list =
+[[L (P ("F", [Var 0; Fn ("S#0", [Var 1; Var 0])]));
+  NL (P ("F", [Fn ("S#0", [Var 1; Var 0]); Fn ("S#0", [Var 1; Var 0])]));
+  L (P ("F", [Var 1; Var 0]))];
+ [NL (P ("F", [Var 0; Fn ("S#0", [Var 1; Var 0])]));
+  L (P ("F", [Fn ("S#0", [Var 1; Var 0]); Fn ("S#0", [Var 1; Var 0])]));
+  L (P ("F", [Var 1; Var 0]))];
+ [L (P ("F", [Var 0; Var 1]));
+  L (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+  NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))];
+ [L (P ("F", [Var 0; Var 1]));
+  NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))];
+ [L (P ("F", [Var 0; Var 1]));
+  NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+  L (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))];
+ [L (P ("F", [Var 0; Var 1]));
+  NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))]]
+
+# resolution_step g [u] v (w::x::y::z);;
+
+- : Base.clause list * Base.clause list =
+([[L (P ("F", [Var 0; Var 1])); L (P ("G", [Var 0; Var 1]))];
+  [L (P ("F", [Var 0; Var 1])); L (P ("F", [Var 0; Var 1]))]],
+ [[L (P ("F", [Var 0; Var 1]));
+   NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+   NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))];
+  [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+   NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+   L (P ("F", [Var 0; Var 1]))];
+  [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+   NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+   L (P ("G", [Var 0; Var 1]))];
+  [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+   NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+   NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+   NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))]])
+
+# resolution_process f;;
+
+0;	3;	48
+1;	2;	48
+2;	3;	48
+3;	4;	48
+4;	3;	48
+5;	4;	48
+6;	3;	48
+7;	2;	48
+8;	1;	48
+- : bool * (Base.clause list * Base.clause list) =
+(true,
+ ([[]; [NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]))];
+   [NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))];
+   [NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))];
+   [L (P ("G", [Var 0; Var 1]))];
+   [L (P ("G", [Var 0; Var 1]));
+    NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Var 0; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("G", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]))];
+   [NL (P ("F", [Var 1; Fn ("S#0", [Var 0; Var 1])]));
+    NL (P ("F", [Fn ("S#0", [Var 0; Var 1]); Fn ("S#0", [Var 0; Var 1])]));
+    L (P ("G", [Var 0; Var 1]))];
+   [L (P ("F", [Var 0; Var 1]))]],
+  []))
+\end{lstlisting}
+
+\end{document}

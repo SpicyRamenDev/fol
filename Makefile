@@ -1,10 +1,2 @@
 all:
-	ocamlc -c base.mli
-	ocamlc -c fol_manip.mli
-	ocamlc -c fol_manip.ml
-	ocamlc -c parse.mli
-	ocamlc -c parse.ml
-	ocamlc -c disp.mli
-	ocamlc -c disp.ml
-	ocamlc -c resolution.mli
-	ocamlc -c resolution.ml
+	ocamlc str.cma graphics.cma base.mli fol_manip.mli fol_manip.ml parse.mli parse.ml disp.mli disp.ml resolution.mli resolution.ml

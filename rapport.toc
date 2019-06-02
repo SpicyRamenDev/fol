@@ -1,0 +1,10 @@
+\babel@toc {french}{}
+\contentsline {part}{I\hspace {1em}Logique du premier ordre}{1}
+\contentsline {section}{\numberline {1}Formules}{1}
+\contentsline {subsection}{\numberline {1.1}Termes}{1}
+\contentsline {subsubsection}{\numberline {1.1.1}Variables}{1}
+\contentsline {subsection}{\numberline {1.2}Clauses}{1}
+\contentsline {paragraph}{Titre}{1}
+\contentsline {subparagraph}{Titre}{1}
+\contentsline {section}{\numberline {A}Titre}{1}
+\contentsline {section}{\numberline {B}Titre}{1}

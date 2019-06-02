@@ -1,0 +1,49 @@
+\babel@toc {french}{}
+\contentsline {section}{\numberline {1}Analyse}{2}
+\contentsline {subsection}{\numberline {1.1}Pr\IeC {\'e}sentation du probl\IeC {\`e}me}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {subsection}{\numberline {1.2}Types utilis\IeC {\'e}s}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {subsection}{\numberline {1.3}Existence d'une solution pour $n\geq 4$}{2}
+\contentsline {subsubsection}{\numberline {1.3.1}D\IeC {\'e}monstration}{2}
+\contentsline {paragraph}{}{2}
+\contentsline {paragraph}{}{4}
+\contentsline {subparagraph}{}{4}
+\contentsline {subsubsection}{\numberline {1.3.2}V\IeC {\'e}rification}{6}
+\contentsline {section}{\numberline {2}R\IeC {\'e}solution \IeC {\'e}tape par \IeC {\'e}tape}{7}
+\contentsline {subsection}{\numberline {2.1}Recherche exhaustive des solutions}{7}
+\contentsline {subsubsection}{\numberline {2.1.1}Gestion de l'\IeC {\'e}chiquier}{7}
+\contentsline {subparagraph}{}{7}
+\contentsline {subparagraph}{}{7}
+\contentsline {subparagraph}{}{7}
+\contentsline {subsubsection}{\numberline {2.1.2}Parcours de l'\IeC {\'e}chiquier}{7}
+\contentsline {subsection}{\numberline {2.2}Tri des solutions}{8}
+\contentsline {subsubsection}{\numberline {2.2.1}Classe d'\IeC {\'e}quivalence d'une solution essentielle}{8}
+\contentsline {subparagraph}{}{8}
+\contentsline {subparagraph}{}{8}
+\contentsline {subparagraph}{}{8}
+\contentsline {subsubsection}{\numberline {2.2.2}Obtention des solutions essentielles et des repr\IeC {\'e}sentants}{9}
+\contentsline {subparagraph}{}{9}
+\contentsline {subparagraph}{}{9}
+\contentsline {subsubsection}{\numberline {2.2.3}Calcul du nombre de solutions essentielles}{9}
+\contentsline {subparagraph}{}{9}
+\contentsline {subsubsection}{\numberline {2.2.4}R\IeC {\'e}sultats}{10}
+\contentsline {subsection}{\numberline {2.3}Affichage}{11}
+\contentsline {subsubsection}{\numberline {2.3.1}Repr\IeC {\'e}sentation d'un \IeC {\'e}chiquier}{11}
+\contentsline {subsubsection}{\numberline {2.3.2}Repr\IeC {\'e}sentation des solutions par classes}{12}
+\contentsline {subsubsection}{\numberline {2.3.3}Repr\IeC {\'e}sentation de solutions essentielles seulement}{12}
+\contentsline {section}{\numberline {3}Programme complet}{13}
+\contentsline {subsection}{\numberline {3.1}Programme}{13}
+\contentsline {subsection}{\numberline {3.2}Exemples}{13}
+\contentsline {subsection}{\numberline {3.3}Complexit\IeC {\'e}}{14}
+\contentsline {subparagraph}{}{14}
+\contentsline {subsection}{\numberline {3.4}Difficult\IeC {\'e}s rencontr\IeC {\'e}es}{14}
+\contentsline {section}{\numberline {4}Compl\IeC {\'e}ments}{14}
+\contentsline {subsection}{\numberline {4.1}Autres fonctions possibles}{14}
+\contentsline {subsection}{\numberline {4.2}Code de l'\IeC {\'e}chiquier}{15}
+\contentsline {subsection}{\numberline {4.3}Exemples de probl\IeC {\`e}mes li\IeC {\'e}s}{15}
+\contentsline {section}{\numberline {5}A faire}{15}
