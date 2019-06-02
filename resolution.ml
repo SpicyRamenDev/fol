@@ -303,14 +303,34 @@ let resolution g =
     | v -> u, v in
   aux []
 
+let rec pure_literal g p v =
+  let sp = substitute_atom (fun i -> Var (2*i)) (atom_of_literal p) in
+  let s = (fun q -> substitute_atom (fun i-> Var (2*i+1)) (atom_of_literal q)) in
+  List.for_all
+    (fun c -> List.for_all
+        (fun q -> is_literal_positive p = is_literal_positive q ||
+                  not (unify_atom_bool g sp (s q))) c) v
+
+let rec pure_clause g c v1 v2 = match c with
+  | [] -> false
+  | p::t -> (pure_literal g p v1 && pure_literal g p v2) ||
+             pure_clause g t v1 v2
+
+let rec pure_clause_elimination g u = function
+  | [] -> List.rev u
+  | c::t -> if pure_clause g c u t then
+      pure_clause_elimination g u t
+    else pure_clause_elimination g (c::u) t
+
 let preprocess g f =
-  List.fold_left (insert g []) [] (List.map simplify_clause f)
+  let f = List.fold_left (insert g.graph []) [] (List.map simplify_clause f) in
+  pure_clause_elimination g [] f
 
 let resolution_process f =
   let f = convert_to_cnf f in
   let n = List.fold_left (fun a b ->
       max ((max_variable_clause b) + (non_variable_count_clause b)) a) 0 f in
   let g = global_make (4 * (n + 1)) in
-  let u = preprocess g.graph f in
+  let u = preprocess g f in
   let a, b = resolution g u in
   List.mem [] a, (a, b)
